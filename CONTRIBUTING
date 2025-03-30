@@ -1,0 +1,108 @@
+# Contributing to LegalContext Connect
+
+Thank you for your interest in contributing to LegalContext Connect! This document provides guidelines and instructions for contributing to the project.
+
+## Code of Conduct
+
+By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md). Please read it before contributing.
+
+## How Can I Contribute?
+
+### Reporting Bugs
+
+Bug reports help us improve LegalContext Connect. To report a bug:
+
+1. Check the [GitHub Issues](https://github.com/protomated/legalcontext-connect/issues) to see if the bug has already been reported
+2. If not, create a new issue using the Bug Report template
+3. Provide a clear title and description
+4. Include steps to reproduce the issue
+5. Add information about your environment (OS, Node.js version, etc.)
+6. Add relevant screenshots or logs if possible
+
+### Suggesting Enhancements
+
+We welcome suggestions for enhancements:
+
+1. Check existing issues to see if your idea has already been suggested
+2. Create a new issue using the Feature Request template
+3. Clearly describe the enhancement and its benefits
+4. Provide examples of how the enhancement would work
+
+### Pull Requests
+
+We welcome pull requests for bug fixes and enhancements:
+
+1. Fork the repository
+2. Create a new branch for your changes
+3. Make your changes, following our coding conventions
+4. Add or update tests as necessary
+5. Ensure all tests pass
+6. Update documentation to reflect your changes
+7. Submit a pull request
+
+For significant changes, please open an issue to discuss before submitting a pull request.
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js 16 or higher
+- npm 7 or higher
+- Git
+
+### Local Development Environment
+
+1. Fork and clone the repository:
+   ```bash
+   git clone https://github.com/YOUR-USERNAME/legalcontext-connect.git
+   cd legalcontext-connect
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Build the project:
+   ```bash
+   npm run build
+   ```
+
+4. Run tests:
+   ```bash
+   npm test
+   ```
+
+### Project Structure
+
+- `src/` - Source code
+  - `mcp/` - MCP server implementation
+  - `netdocuments/` - NetDocuments API integration
+  - `oauth/` - OAuth 2.0 implementation
+- `electron/` - Electron app code
+- `test/` - Test files
+- `docs/` - Documentation
+
+## Coding Conventions
+
+- Use TypeScript for all new code
+- Follow the existing code style (enforced by ESLint and Prettier)
+- Write meaningful commit messages
+- Include JSDoc comments for all public APIs
+- Write tests for all new features and bug fixes
+
+## Documentation
+
+- Update the README.md if your changes affect how users interact with the project
+- Update or add documentation in the `docs/` directory as needed
+- Include inline comments for complex logic
+
+## Legal
+
+By contributing to LegalContext Connect, you agree that your contributions will be licensed under the project's [Mozilla Public License 2.0](LICENSE).
+
+## Questions?
+
+If you have any questions about contributing, please open an issue or contact us at [ask@protomated.com](mailto:ask@protomated.com).
+
+Thank you for contributing to LegalContext Connect!
