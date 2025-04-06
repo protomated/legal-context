@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Development services
+  legalcontext-dev:
+    container_name: legalcontext-dev
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_HOST=postgres-dev
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_NAME=legalcontext_dev
+      # These would typically be in a .env file or passed at runtime
+      - CLIO_CLIENT_ID=${CLIO_CLIENT_ID}
+      - CLIO_CLIENT_SECRET=${CLIO_CLIENT_SECRET}
+      - CLIO_REDIRECT_URI=${CLIO_REDIRECT_URI}
+      - CLIO_API_URL=${CLIO_API_URL}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      - postgres-dev
+    command: bun run start:dev
+
+  postgres-dev:
+    container_name: postgres-dev
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=legalcontext_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+      # Add custom initialization scripts if needed
+      - ./docker/postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ./docker/postgres/init-vector.sql:/docker-entrypoint-initdb.d/init-vector.sql:ro
+
+  # Production services
+  legalcontext-prod:
+    container_name: legalcontext-prod
+    build:
+      context: .
+      target: production
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_HOST=postgres-prod
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=${PROD_DB_PASSWORD}
+      - DATABASE_NAME=legalcontext_prod
+      - CLIO_CLIENT_ID=${PROD_CLIO_CLIENT_ID}
+      - CLIO_CLIENT_SECRET=${PROD_CLIO_CLIENT_SECRET}
+      - CLIO_REDIRECT_URI=${PROD_CLIO_REDIRECT_URI}
+      - CLIO_API_URL=${PROD_CLIO_API_URL}
+      - ENCRYPTION_KEY=${PROD_ENCRYPTION_KEY}
+      - MAX_DOCUMENT_SIZE=5242880
+      - CHUNK_SIZE=1000
+      - CHUNK_OVERLAP=200
+    depends_on:
+      - postgres-prod
+    restart: unless-stopped
+    # Production specific logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres-prod:
+    container_name: postgres-prod
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${PROD_DB_PASSWORD}
+      - POSTGRES_DB=legalcontext_prod
+    volumes:
+      - postgres-prod-data:/var/lib/postgresql/data
+      # Add custom initialization scripts
+      - ./docker/postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+      - ./docker/postgres/init-vector.sql:/docker-entrypoint-initdb.d/init-vector.sql:ro
+    # Production-specific configurations
+    restart: unless-stopped
+    # Use a custom postgres configuration for production
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    configs:
+      - source: postgres_config
+        target: /etc/postgresql/postgresql.conf
+
+configs:
+  postgres_config:
+    file: ./docker/postgres/postgresql.conf
+
+volumes:
+  node_modules:
+  postgres-dev-data:
+  postgres-prod-data:

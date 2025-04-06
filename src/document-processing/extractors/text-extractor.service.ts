@@ -1,0 +1,204 @@
+// src/document-processing/extractors/text-extractor.service.ts
+import { Injectable, Logger } from '@nestjs/common';
+
+export class UnsupportedDocumentTypeException extends Error {
+  constructor(mimeType: string) {
+    super(`Unsupported document type: ${mimeType}`);
+  }
+}
+
+@Injectable()
+export class TextExtractorService {
+  private readonly logger = new Logger(TextExtractorService.name);
+
+  /**
+   * Extract text from document based on MIME type
+   */
+  async extract(document: Buffer, mimeType: string): Promise<string> {
+    this.logger.debug(`Extracting text from document with MIME type: ${mimeType}`);
+
+    switch (mimeType) {
+      case 'application/pdf':
+        return this.extractFromPdf(document);
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return this.extractFromDocx(document);
+      case 'text/plain':
+        return document.toString('utf-8');
+      case 'text/html':
+        return this.extractFromHtml(document);
+      case 'application/rtf':
+        return this.extractFromRtf(document);
+      default:
+        throw new UnsupportedDocumentTypeException(mimeType);
+    }
+  }
+
+  /**
+   * Extract text from PDF using pdf-parse library
+   * Note: In a real implementation, you'd want to use a library like pdf-parse
+   */
+  private async extractFromPdf(document: Buffer): Promise<string> {
+    // Placeholder for actual PDF extraction
+    // In a real implementation, use a library like pdf-parse
+    this.logger.debug('Extracting text from PDF');
+
+    // Mock implementation for demonstration
+    return 'Extracted PDF text would appear here';
+  }
+
+  /**
+   * Extract text from DOCX using mammoth.js or similar
+   */
+  private async extractFromDocx(document: Buffer): Promise<string> {
+    // Placeholder for actual DOCX extraction
+    // In a real implementation, use a library like mammoth.js
+    this.logger.debug('Extracting text from DOCX');
+
+    // Mock implementation for demonstration
+    return 'Extracted DOCX text would appear here';
+  }
+
+  /**
+   * Extract text from HTML using cheerio or similar
+   */
+  private async extractFromHtml(document: Buffer): Promise<string> {
+    // Placeholder for actual HTML extraction
+    // In a real implementation, use a library like cheerio
+    this.logger.debug('Extracting text from HTML');
+
+    // Mock implementation for demonstration
+    return 'Extracted HTML text would appear here';
+  }
+
+  /**
+   * Extract text from RTF
+   */
+  private async extractFromRtf(document: Buffer): Promise<string> {
+    // Placeholder for actual RTF extraction
+    this.logger.debug('Extracting text from RTF');
+
+    // Mock implementation for demonstration
+    return 'Extracted RTF text would appear here';
+  }
+}
+
+// src/document-processing/chunking/chunking.service.ts
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+export interface ChunkingOptions {
+  chunkSize?: number;
+  chunkOverlap?: number;
+  preserveParagraphs?: boolean;
+}
+
+export interface DocumentChunkData {
+  content: string;
+  startIndex: number;
+  endIndex: number;
+}
+
+@Injectable()
+export class ChunkingService {
+  private readonly logger = new Logger(ChunkingService.name);
+
+  constructor(private readonly configService: ConfigService) {}
+
+  /**
+   * Split document text into chunks with optional overlap
+   */
+  chunk(text: string, options?: ChunkingOptions): DocumentChunkData[] {
+    const chunkSize = options?.chunkSize || this.configService.get('documentProcessing.chunkSize');
+    const chunkOverlap = options?.chunkOverlap || this.configService.get('documentProcessing.chunkOverlap');
+    const preserveParagraphs = options?.preserveParagraphs !== undefined ? options.preserveParagraphs : true;
+
+    this.logger.debug(`Chunking document with size: ${chunkSize}, overlap: ${chunkOverlap}, preserveParagraphs: ${preserveParagraphs}`);
+
+    if (preserveParagraphs) {
+      return this.chunkByParagraphs(text, chunkSize, chunkOverlap);
+    } else {
+      return this.chunkBySize(text, chunkSize, chunkOverlap);
+    }
+  }
+
+  /**
+   * Split text into chunks of approximately equal size
+   */
+  private chunkBySize(text: string, chunkSize: number, chunkOverlap: number): DocumentChunkData[] {
+    const chunks: DocumentChunkData[] = [];
+    let startIndex = 0;
+
+    while (startIndex < text.length) {
+      const endIndex = Math.min(startIndex + chunkSize, text.length);
+
+      chunks.push({
+        content: text.substring(startIndex, endIndex),
+        startIndex,
+        endIndex,
+      });
+
+      startIndex = endIndex - chunkOverlap;
+
+      // Prevent infinite loop if overlap >= chunkSize
+      if (startIndex <= chunks[chunks.length - 1].startIndex) {
+        startIndex = chunks[chunks.length - 1].endIndex;
+      }
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Split text by paragraphs, keeping paragraphs together when possible
+   */
+  private chunkByParagraphs(text: string, chunkSize: number, chunkOverlap: number): DocumentChunkData[] {
+    // Split text into paragraphs
+    const paragraphs = text.split(/\n\s*\n/);
+    const chunks: DocumentChunkData[] = [];
+
+    let currentChunk = '';
+    let chunkStartIndex = 0;
+    let currentIndex = 0;
+
+    for (const paragraph of paragraphs) {
+      // If adding this paragraph would exceed chunk size and we already have content,
+      // create a new chunk
+      if (currentChunk.length + paragraph.length + 2 > chunkSize && currentChunk.length > 0) {
+        chunks.push({
+          content: currentChunk,
+          startIndex: chunkStartIndex,
+          endIndex: currentIndex - 2, // Subtract 2 for the paragraph separator
+        });
+
+        // Calculate new start index with overlap
+        const overlapStart = Math.max(currentIndex - chunkOverlap, chunkStartIndex);
+        const overlapContent = text.substring(overlapStart, currentIndex - 2);
+
+        currentChunk = overlapContent;
+        chunkStartIndex = overlapStart;
+      }
+
+      // Add paragraph to current chunk
+      if (currentChunk.length > 0) {
+        currentChunk += '\n\n';
+        currentIndex += 2;
+      }
+
+      currentChunk += paragraph;
+      currentIndex += paragraph.length;
+    }
+
+    // Add the last chunk if it has content
+    if (currentChunk.length > 0) {
+      chunks.push({
+        content: currentChunk,
+        startIndex: chunkStartIndex,
+        endIndex: currentIndex,
+      });
+    }
+
+    return chunks;
+  }
+}
+
+
