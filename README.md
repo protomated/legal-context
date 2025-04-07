@@ -80,8 +80,7 @@ The system is designed to keep all document processing within the firm's securit
 ## Documentation
 
 Additional documentation can be found in the `docs` directory:
-- [About LegalContext](docs/about-legal-text.md) - The "why" behind LegalContext
-- [MCP Server Implementation Guide](docs/mcp-server-guide.md) - Overview of the MCP implementation
+- [About LegalContext](docs/about-legal-context) - The "why" behind LegalContext
 - [Claude Desktop Integration](docs/mcp-client-integration.md) - Guide to integrating with Claude Desktop
 - [Security Architecture](docs/security-architecture.md) - Overview of the security design
 - [Development Roadmap](docs/development-roadmap.md) - Planned features and timeline
