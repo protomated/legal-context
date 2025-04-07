@@ -565,12 +565,11 @@ export class DocumentIndexer {
             text: indexedChunks[0].text.substring(0, 50) + '...',
             doc_id: indexedChunks[0].doc_id,
             vector_length: indexedChunks[0].vector.length,
-            vector_sample: indexedChunks[0].vector.slice(0, 5)
+            vector_sample: indexedChunks[0].vector.slice(0, 5),
           })}`);
         }
 
-        // WORKAROUND: Store chunks in memory for faster retrieval
-        // This is a workaround for LanceDB 0.18.2 compatibility issues
+        // Store chunks in memory for faster retrieval
         logger.info(`Storing ${indexedChunks.length} chunks in memory for document ${document.id}`);
         this.inMemoryChunks.set(document.id, indexedChunks);
 
@@ -628,12 +627,70 @@ export class DocumentIndexer {
       // Log the query for debugging
       logger.info(`Searching for documents matching query: "${query.substring(0, 50)}${query.length > 50 ? '...' : ''}"`);
 
-      // WORKAROUND: Use in-memory cache instead of LanceDB
-      logger.info('Using in-memory cache instead of vector search due to compatibility issues');
-
       // Check if we have any documents in the in-memory cache
       if (this.inMemoryChunks.size === 0) {
-        logger.warn('In-memory cache is empty, no documents to search');
+        logger.info('In-memory cache is empty, attempting to load from database');
+
+        // Try to load documents from LanceDB into memory
+        try {
+          const table = await this.tablePromise;
+          if (table) {
+            // Simplified query to just load all documents
+            let allDocuments;
+            try {
+              // First attempt - Try to use the query method
+              allDocuments = await table.query().execute();
+            } catch (queryError) {
+              logger.warn(`Error using table.query(): ${queryError}`);
+              try {
+                // Second attempt - Use search with a neutral vector
+                const dummyVector = Array(EMBEDDING_DIMENSION).fill(0.1);
+                allDocuments = await table.search(dummyVector, 'vector')
+                  .limit(1000) // Get a reasonable number of documents
+                  .execute();
+              } catch (searchError) {
+                logger.error(`Error using table.search(): ${searchError}`);
+                throw new Error('Failed to load documents from database');
+              }
+            }
+
+            // Extract chunks from results
+            let chunks: IndexedChunk[] = [];
+            if (Array.isArray(allDocuments)) {
+              chunks = allDocuments as IndexedChunk[];
+            } else if (allDocuments && typeof allDocuments === 'object') {
+              if (allDocuments.data && Array.isArray(allDocuments.data)) {
+                chunks = allDocuments.data as IndexedChunk[];
+              } else if (allDocuments.inner && Array.isArray(allDocuments.inner)) {
+                chunks = allDocuments.inner as IndexedChunk[];
+              }
+            }
+
+            // Store chunks in memory by document ID
+            if (chunks.length > 0) {
+              logger.info(`Loaded ${chunks.length} chunks from database into memory`);
+
+              // Group chunks by document ID
+              chunks.forEach(chunk => {
+                if (!this.inMemoryChunks.has(chunk.doc_id)) {
+                  this.inMemoryChunks.set(chunk.doc_id, []);
+                }
+                this.inMemoryChunks.get(chunk.doc_id)?.push(chunk);
+              });
+
+              logger.info(`Organized chunks for ${this.inMemoryChunks.size} documents in memory`);
+            } else {
+              logger.warn('No chunks found in database');
+            }
+          }
+        } catch (loadError) {
+          logger.error(`Error loading documents from database: ${loadError}`);
+        }
+      }
+
+      // Check again if we have any documents after loading attempt
+      if (this.inMemoryChunks.size === 0) {
+        logger.warn('No documents to search through, recommend indexing documents first');
         return [];
       }
 
@@ -662,7 +719,7 @@ export class DocumentIndexer {
 
           return {
             chunk,
-            score: distance
+            score: distance,
           };
         });
 
@@ -729,7 +786,7 @@ export class DocumentIndexer {
 
           return {
             chunk,
-            score: 1 - Math.min(score, 1) // Convert to distance (0 = perfect match)
+            score: 1 - Math.min(score, 1), // Convert to distance (0 = perfect match)
           };
         });
 
@@ -858,6 +915,54 @@ export class DocumentIndexer {
       return false;
     }
   }
+
+  /**
+   * Reset the document indexer
+   * This completely clears both the in-memory cache and the LanceDB database
+   */
+  public async reset(): Promise<boolean> {
+    try {
+      logger.info('Resetting document indexer');
+
+      // Clear in-memory cache
+      this.inMemoryChunks.clear();
+      this.documentVersions.clear();
+
+      // If there's an active connection, close it
+      try {
+        await this.close();
+      } catch (closeError) {
+        logger.warn(`Error closing existing connection: ${closeError}`);
+      }
+
+      // Re-initialize with a fresh database
+      this.initialized = false;
+
+      // Try to recreate database
+      try {
+        const db = await lancedb.connect(config.lanceDbPath);
+
+        // Drop existing tables
+        const tables = await db.tableNames();
+        for (const tableName of tables) {
+          await db.dropTable(tableName);
+        }
+
+        logger.info('Successfully dropped all existing tables');
+      } catch (dbError) {
+        logger.error(`Error accessing database during reset: ${dbError}`);
+      }
+
+      // Re-initialize
+      const initResult = await this.initialize();
+
+      logger.info(`Document indexer reset ${initResult ? 'successful' : 'failed'}`);
+      return initResult;
+    } catch (error) {
+      logger.error(`Error resetting document indexer: ${error}`);
+      return false;
+    }
+  }
 }
 
 /**
@@ -869,3 +974,4 @@ export function getDocumentIndexer(): DocumentIndexer {
   }
   return indexerInstance;
 }
+
