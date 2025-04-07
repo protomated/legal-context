@@ -1,16 +1,16 @@
 # LegalContext
 ## Secure AI document context for law firms
 
-[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://github.com/protomated/legalcontext-connect/blob/main/LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/protomated/legalcontext-connect/releases)
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://github.com/protomated/legal-context/blob/main/LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/protomated/legal-context/releases)
 
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [The AI Hallucination Crisis in Legal Practice](#the-ai-hallucination-crisis-in-legal-practice)
-3. [How LegalContext Solves This Problem](#how-legalcontext-connect-solves-this-problem)
+3. [How LegalContext Solves This Problem](#how-legal-context-solves-this-problem)
 4. [User Flow Diagram](#user-flow-diagram)
-5. [LegalContext vs. Alternative Solutions](#legalcontext-connect-vs-alternative-solutions)
+5. [LegalContext vs. Alternative Solutions](#legal-context-vs-alternative-solutions)
 6. [Key Features](#key-features)
 7. [Technical Architecture](#technical-architecture)
 8. [Frequently Asked Questions](#frequently-asked-questions)
@@ -294,7 +294,7 @@ For technical support, please visit our documentation at https://help.protomated
 
 ### Installation
 
-1. Download the latest release from the [releases page](https://github.com/protomated/legalcontext-connect/releases)
+1. Download the latest release from the [releases page](https://github.com/protomated/legal-context/releases)
 
 2. Run the installer and follow the setup wizard
 
@@ -467,8 +467,8 @@ This section provides detailed information for developers and contributors who w
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/protomated/legalcontext-connect.git
-cd legalcontext-connect
+git clone https://github.com/protomated/legal-context.git
+cd legal-context
 ```
 
 2. **Install dependencies**
@@ -523,7 +523,7 @@ Edit your Claude Desktop configuration to use the local MCP server:
     "legalcontext": {
       "command": "bun",
       "args": ["run", "start:dev"],
-      "cwd": "/path/to/legalcontext-connect"
+      "cwd": "/path/to/legal-context"
     }
   }
 }
@@ -534,7 +534,7 @@ Edit your Claude Desktop configuration to use the local MCP server:
 The project follows a modular NestJS architecture:
 
 ```
-legalcontext-connect/
+legal-context/
 ├── src/
 │   ├── main.ts                  # Application entry point
 │   ├── app.module.ts            # Root module
@@ -675,7 +675,7 @@ LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
 ## Support
 
 - **Documentation**: [https://help.protomated.com/legalcontext](https://help.protomated.com/legalcontext)
-- **Community Forum & Issues**: [GitHub Issues](https://github.com/protomated/legalcontext-connect/issues)
+- **Community Forum & Issues**: [GitHub Issues](https://github.com/protomated/legal-context/issues)
 - **Professional Support**: [ask@protomated.com](mailto:ask@protomated.com)
 
 ---
