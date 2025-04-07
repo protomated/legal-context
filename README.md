@@ -5,7 +5,7 @@ LegalContext is an open-source Model Context Protocol (MCP) server that creates 
 ## Project Status
 
 ⚠️ **Development Status**: This project is in active development. Core MCP functionality is implemented, but document management integration is still in progress.
-
+about
 ## Core Functionality
 
 The current implementation includes:

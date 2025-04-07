@@ -57,6 +57,24 @@ temp/
 }
 ```
 
+# claude-config.json
+
+```json
+{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "bunx",
+      "args": [
+        "run",
+        "/path/to/legal-context/src/claude-mcp-server.ts"
+      ],
+      "cwd": ""
+    }
+  }
+}
+
+```
+
 # CODE_OF_CONDUCT.md
 
 ```md
@@ -272,6 +290,120 @@ By contributing to LegalContext Connect, you agree that your contributions will 
 If you have any questions about contributing, please open an issue or contact us at [ask@protomated.com](mailto:ask@protomated.com).
 
 Thank you for contributing to LegalContext Connect!
+
+```
+
+# CONTRIBUTING.md
+
+```md
+# Contributing to LegalContext
+
+Thank you for your interest in contributing to LegalContext! This document provides guidelines and instructions for contributing to the project.
+
+## Code of Conduct
+
+By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md). Please read it before contributing.
+
+## How Can I Contribute?
+
+### Reporting Bugs
+
+Bug reports help us improve LegalContext. To report a bug:
+
+1. Check the [GitHub Issues](https://github.com/protomated/legalcontext-connect/issues) to see if the bug has already been reported
+2. If not, create a new issue using the Bug Report template
+3. Provide a clear title and description
+4. Include steps to reproduce the issue
+5. Add information about your environment (OS, Node.js version, etc.)
+6. Add relevant screenshots or logs if possible
+
+### Suggesting Enhancements
+
+We welcome suggestions for enhancements:
+
+1. Check existing issues to see if your idea has already been suggested
+2. Create a new issue using the Feature Request template
+3. Clearly describe the enhancement and its benefits
+4. Provide examples of how the enhancement would work
+
+### Pull Requests
+
+We welcome pull requests for bug fixes and enhancements:
+
+1. Fork the repository
+2. Create a new branch for your changes
+3. Make your changes, following our coding conventions
+4. Add or update tests as necessary
+5. Ensure all tests pass
+6. Update documentation to reflect your changes
+7. Submit a pull request
+
+For significant changes, please open an issue to discuss before submitting a pull request.
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js 16 or higher
+- npm 7 or higher
+- Git
+
+### Local Development Environment
+
+1. Fork and clone the repository:
+   \`\`\`bash
+   git clone https://github.com/YOUR-USERNAME/legalcontext-connect.git
+   cd legalcontext-connect
+   \`\`\`
+
+2. Install dependencies:
+   \`\`\`bash
+   npm install
+   \`\`\`
+
+3. Build the project:
+   \`\`\`bash
+   npm run build
+   \`\`\`
+
+4. Run tests:
+   \`\`\`bash
+   npm test
+   \`\`\`
+
+### Project Structure
+
+- `src/` - Source code
+  - `mcp/` - MCP server implementation
+  - `netdocuments/` - NetDocuments API integration
+  - `oauth/` - OAuth 2.0 implementation
+- `electron/` - Electron app code
+- `test/` - Test files
+- `docs/` - Documentation
+
+## Coding Conventions
+
+- Use TypeScript for all new code
+- Follow the existing code style (enforced by ESLint and Prettier)
+- Write meaningful commit messages
+- Include JSDoc comments for all public APIs
+- Write tests for all new features and bug fixes
+
+## Documentation
+
+- Update the README.md if your changes affect how users interact with the project
+- Update or add documentation in the `docs/` directory as needed
+- Include inline comments for complex logic
+
+## Legal
+
+By contributing to LegalContext, you agree that your contributions will be licensed under the project's [Mozilla Public License 2.0](LICENSE).
+
+## Questions?
+
+If you have any questions about contributing, please open an issue or contact us at [ask@protomated.com](mailto:ask@protomated.com).
+
+Thank you for contributing to LegalContext!
 
 ```
 
@@ -1247,6 +1379,146 @@ LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
 
 ```
 
+# docs/claude-integration.md
+
+```md
+# Claude Desktop Integration Guide
+
+This guide explains how to integrate LegalContext with Claude Desktop using the Model Context Protocol (MCP).
+
+## Overview
+
+The Model Context Protocol (MCP) allows applications like Claude Desktop to connect to external servers like LegalContext to access resources and use tools. However, Claude Desktop expects strict JSON-RPC communication over stdio, which means any console logs or other output can break the protocol.
+
+## Using the Claude MCP Server
+
+We've created a specialized MCP server specifically for Claude Desktop integration that:
+
+1. Routes all logging to stderr instead of stdout
+2. Implements the basic MCP protocol requirements
+3. Provides resources and tools for interacting with legal documents
+
+## Configuration Steps
+
+### 1. Run the Claude MCP Server
+
+\`\`\`bash
+# In your LegalContext project directory
+bun run claude:server
+\`\`\`
+
+This will start the MCP server that listens on stdin/stdout.
+
+### 2. Configure Claude Desktop
+
+1. Open Claude Desktop's settings
+2. Find the MCP Server configuration section
+3. Add a new server with the following configuration:
+
+\`\`\`json
+{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "bun",
+      "args": [
+        "run",
+        "claude:server"
+      ],
+      "cwd": "/path/to/your/legalcontext/directory"
+    }
+  }
+}
+\`\`\`
+
+Replace `/path/to/your/legalcontext/directory` with the actual path to your LegalContext project directory.
+
+### 3. Test the Integration
+
+1. Restart Claude Desktop
+2. Open a new conversation
+3. Type a message like "What resources are available from the LegalContext server?"
+4. Claude should be able to list the available resources and tools from the LegalContext server
+
+## Troubleshooting
+
+If Claude Desktop cannot connect to the LegalContext server, check the following:
+
+1. Make sure the server is running (`bun run claude:server`)
+2. Check Claude Desktop's logs for any connection errors
+3. Verify the path in the configuration is correct
+4. Ensure no console.log statements are being used in the server code
+
+## Common Issues
+
+### JSON Parse Errors in Claude Desktop Logs
+
+If you see errors like `Unexpected token 'I', "Initializi"... is not valid JSON` in Claude Desktop logs, it means the server is outputting non-JSON content to stdout. This is usually caused by:
+
+1. Console.log statements in the server code
+2. Startup messages or other output to stdout
+
+Solution: Use our custom logger that routes all output to stderr instead of stdout.
+
+### Connection Timeouts
+
+If Claude Desktop times out trying to connect to the server, check:
+
+1. The server is running and listening
+2. The path in the configuration is correct
+3. The permissions are set correctly for the server directory
+
+## Advanced Configuration
+
+### Adding Custom Resources
+
+To add custom resources to the LegalContext server for Claude Desktop, modify the `claude-mcp-server.ts` file:
+
+\`\`\`typescript
+// Add a custom resource
+server.resource(
+  'custom-resource',
+  new ResourceTemplate('custom://{parameter}', { list: undefined }),
+  (uri, params) => {
+    logger.debug('Handling custom resource request:', uri.href, params);
+    const { parameter } = params;
+    return {
+      contents: [{
+        uri: uri.href,
+        text: `Custom resource content with parameter: ${parameter}`
+      }]
+    };
+  }
+);
+\`\`\`
+
+### Adding Custom Tools
+
+To add custom tools:
+
+\`\`\`typescript
+// Add a custom tool
+server.tool(
+  'custom-tool',
+  { 
+    param1: z.string(),
+    param2: z.number().optional()
+  },
+  (params) => {
+    logger.debug('Handling custom tool request:', params);
+    return {
+      content: [{ 
+        type: "text", 
+        text: `Custom tool result with params: ${JSON.stringify(params)}`
+      }]
+    };
+  }
+);
+\`\`\`
+
+Remember to restart the server and Claude Desktop after making changes.
+
+```
+
 # docs/development-roadmap.md
 
 ```md
@@ -1904,6 +2176,7 @@ export default tseslint.config(
     "standalone:server": "bun run src/standalone/server.ts",
     "standalone:client": "bun run src/standalone/client.ts",
     "standalone": "bun run standalone:client",
+    "claude:server": "bun src/claude-mcp-server.ts",
     "simple-test": "node src/simple-test.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -1967,122 +2240,6 @@ export default tseslint.config(
 
 ```
 
-# README-mcp-implementation.md
-
-```md
-# MCP Server Implementation Notes
-
-## Current Implementation Status
-
-We've been working on implementing a Model Context Protocol (MCP) server for the LegalContext project. This server will create a secure bridge between law firms' document management systems (initially Clio) and Claude Desktop.
-
-### Challenges Encountered
-
-1. **Timeouts in Response Handling**: We've encountered issues with request timeouts when trying to read resources or call tools. This seems to be an issue with how the MCP client and server communicate via stdio transport.
-
-2. **Integration with NestJS**: The original plan was to use NestJS for the server structure, but we've had difficulties integrating the MCP server properly within the NestJS framework due to dependency issues.
-
-### Working Solution
-
-We've found that the basic MCP server implementation works when:
-1. It uses the direct `McpServer` class from the SDK
-2. It's implemented as a standalone service rather than within a framework
-3. Resources and tools are registered properly with the correct handlers
-
-## Next Steps
-
-### 1. Standalone MCP Server Implementation
-
-The simplest approach to getting a working MCP server is:
-
-\`\`\`javascript
-// Create an MCP server directly
-const server = new McpServer({
-  name: "LegalContext",
-  version: "1.0.0"
-});
-
-// Register resources and tools
-server.resource('info', 'info://server', () => { ... });
-server.tool('echo', { message: 'string' }, () => { ... });
-
-// Connect to the transport
-const transport = new StdioServerTransport();
-await server.connect(transport);
-\`\`\`
-
-### 2. Modular Structure Without NestJS
-
-For the LegalContext project, we'll create a modular structure without relying on NestJS:
-
-- `src/server.ts` - Main server entry point
-- `src/resources/` - Resource implementations
-- `src/tools/` - Tool implementations
-- `src/clio/` - Clio API integration
-- `src/processing/` - Document processing engine
-
-### 3. Implementation Plan
-
-1. Create a basic working MCP server that responds to resource and tool requests
-2. Add document processing functionality
-3. Integrate with Clio's API
-4. Implement complete resources and tools for document access
-
-## Reference Implementation
-
-\`\`\`typescript
-// Example MCP server implementation
-import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-
-// Create the server
-const server = new McpServer({
-  name: "LegalContext",
-  version: "1.0.0"
-});
-
-// Register resources
-server.resource(
-  'info',
-  'info://server',
-  (uri) => ({
-    contents: [{
-      uri: uri.href,
-      text: "LegalContext MCP Server - A secure bridge between law firm document management systems and AI assistants."
-    }]
-  })
-);
-
-// Register tools
-server.tool(
-  'search',
-  { 
-    query: z.string(),
-    limit: z.number().optional()
-  },
-  async (params) => {
-    // Implement search functionality
-    return {
-      content: [{ 
-        type: "text", 
-        text: `Search results for: ${params.query}` 
-      }]
-    };
-  }
-);
-
-// Start the server
-const transport = new StdioServerTransport();
-await server.connect(transport);
-\`\`\`
-
-## Conclusion
-
-Moving forward, we'll use a simplified approach that focuses on the core MCP functionality rather than trying to integrate it with NestJS. This will allow us to make progress on the core functionality of connecting Claude Desktop to law firm document management systems.
-
-```
-
 # README.md
 
 ```md
@@ -2093,7 +2250,7 @@ LegalContext is an open-source Model Context Protocol (MCP) server that creates 
 ## Project Status
 
 ⚠️ **Development Status**: This project is in active development. Core MCP functionality is implemented, but document management integration is still in progress.
-
+about
 ## Core Functionality
 
 The current implementation includes:
@@ -2468,6 +2625,147 @@ startMcpServer().catch(error => {
   console.error(`Failed to start MCP server: ${error.message}`);
   process.exit(1);
 });
+```
+
+# src/claude-mcp-server.ts
+
+```ts
+// src/claude-mcp-server.ts
+// A clean MCP server implementation specifically for Claude Desktop
+
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+import { createLogger } from './utils/logger';
+
+// Create a logger that writes to stderr only
+const logger = createLogger('LegalContext');
+
+// Redirect console methods to our logger to avoid stdout pollution
+const originalConsoleLog = console.log;
+const originalConsoleInfo = console.info;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+const originalConsoleDebug = console.debug;
+
+// Override console methods to use our stderr logger
+console.log = (...args) => logger.info(...args);
+console.info = (...args) => logger.info(...args);
+console.warn = (...args) => logger.warn(...args);
+console.error = (...args) => logger.error(args[0], args[1] instanceof Error ? args[1] : undefined);
+console.debug = (...args) => logger.debug(...args);
+
+/**
+ * Main entry point for the LegalContext MCP server
+ */
+async function main() {
+  logger.info('Initializing LegalContext MCP server...');
+  
+  // Create the MCP server
+  const server = new McpServer({
+    name: "LegalContext",
+    version: "1.0.0"
+  });
+
+  // Register resources
+  logger.info('Registering resources...');
+  
+  // Info resource
+  server.resource(
+    'info',
+    'info://server',
+    (uri) => {
+      logger.debug('Handling info resource request:', uri.href);
+      return {
+        contents: [{
+          uri: uri.href,
+          text: "LegalContext MCP Server - A secure bridge between law firm document management systems and AI assistants."
+        }]
+      };
+    }
+  );
+  
+  // Document resource (placeholder)
+  server.resource(
+    'document',
+    new ResourceTemplate('document://{id}', { list: undefined }),
+    (uri, params) => {
+      logger.debug('Handling document resource request:', uri.href, params);
+      const { id } = params;
+      return {
+        contents: [{
+          uri: uri.href,
+          text: `Document ${id} content would appear here.`
+        }]
+      };
+    }
+  );
+
+  // Register tools
+  logger.info('Registering tools...');
+  
+  // Search tool
+  server.tool(
+    'search',
+    { 
+      query: z.string(),
+      limit: z.number().optional()
+    },
+    (params) => {
+      logger.debug('Handling search tool request:', params);
+      const { query, limit = 5 } = params;
+      return {
+        content: [{ 
+          type: "text", 
+          text: `Found ${limit} results for query: "${query}"`
+        }]
+      };
+    }
+  );
+  
+  // Echo tool for testing
+  server.tool(
+    'echo',
+    { message: z.string() },
+    (params) => {
+      logger.debug('Handling echo tool request:', params);
+      return {
+        content: [{ 
+          type: "text", 
+          text: `Echo: ${params.message}`
+        }]
+      };
+    }
+  );
+
+  // Connect to stdio transport
+  logger.info('Starting server with stdio transport...');
+  const transport = new StdioServerTransport();
+  
+  try {
+    await server.connect(transport);
+    logger.info('MCP server successfully connected to transport');
+    
+    // Keep the process alive
+    process.stdin.resume();
+    
+    // Handle graceful shutdown
+    process.on('SIGINT', () => {
+      logger.info('Shutting down LegalContext MCP server...');
+      process.exit(0);
+    });
+  } catch (error) {
+    logger.error('Error connecting MCP server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+main().catch(error => {
+  logger.error('Unhandled error in MCP server:', error);
+  process.exit(1);
+});
+
 ```
 
 # src/clio/api/.gitkeep
@@ -5917,12 +6215,16 @@ setTimeout(() => {
 // src/standalone/client.ts
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createLogger } from '../utils/logger';
+
+// Create a logger that writes to stderr
+const logger = createLogger('MCP-Client');
 
 /**
  * Test client for the LegalContext MCP server
  */
 async function main() {
-  console.log('Starting LegalContext MCP test client...');
+  logger.info('Starting LegalContext MCP test client...');
   
   // Create a transport that spawns the server process
   const transport = new StdioClientTransport({
@@ -5948,18 +6250,18 @@ async function main() {
 
   try {
     // Connect to the server
-    console.log('Connecting to MCP server...');
+    logger.info('Connecting to MCP server...');
     await client.connect(transport);
-    console.log('Connected successfully');
+    logger.info('Connected successfully');
 
     // Test basic capabilities
     await runTests(client);
     
-    console.log('All tests completed successfully');
+    logger.info('All tests completed successfully');
   } catch (error) {
-    console.error('Error during test:', error);
+    logger.error('Error during test:', error);
   } finally {
-    console.log('Exiting client...');
+    logger.info('Exiting client...');
     process.exit(0);
   }
 }
@@ -5969,46 +6271,47 @@ async function main() {
  */
 async function runTests(client: Client) {
   // Test 1: List resources
-  console.log('\n--- Test 1: List Resources ---');
+  logger.info('\n--- Test 1: List Resources ---');
   const resources = await client.listResources();
-  console.log('Resources:', JSON.stringify(resources, null, 2));
+  logger.info('Resources:', resources);
 
   // Test 2: Read info resource
-  console.log('\n--- Test 2: Read Info Resource ---');
+  logger.info('\n--- Test 2: Read Info Resource ---');
   const infoResource = await client.readResource('info://server');
-  console.log('Info resource:', JSON.stringify(infoResource, null, 2));
+  logger.info('Info resource:', infoResource);
 
   // Test 3: Read document resource
-  console.log('\n--- Test 3: Read Document Resource ---');
+  logger.info('\n--- Test 3: Read Document Resource ---');
   const documentResource = await client.readResource('document://test-doc-123');
-  console.log('Document resource:', JSON.stringify(documentResource, null, 2));
+  logger.info('Document resource:', documentResource);
 
   // Test 4: List tools
-  console.log('\n--- Test 4: List Tools ---');
+  logger.info('\n--- Test 4: List Tools ---');
   const tools = await client.listTools();
-  console.log('Tools:', JSON.stringify(tools, null, 2));
+  logger.info('Tools:', tools);
 
   // Test 5: Call echo tool
-  console.log('\n--- Test 5: Call Echo Tool ---');
+  logger.info('\n--- Test 5: Call Echo Tool ---');
   const echoResult = await client.callTool('echo', {
     message: 'Hello from the test client!'
   });
-  console.log('Echo result:', JSON.stringify(echoResult, null, 2));
+  logger.info('Echo result:', echoResult);
 
   // Test 6: Call search tool
-  console.log('\n--- Test 6: Call Search Tool ---');
+  logger.info('\n--- Test 6: Call Search Tool ---');
   const searchResult = await client.callTool('search', {
     query: 'legal documents',
     limit: 3
   });
-  console.log('Search result:', JSON.stringify(searchResult, null, 2));
+  logger.info('Search result:', searchResult);
 }
 
 // Run the main function
 main().catch(error => {
-  console.error('Unhandled error:', error);
+  logger.error('Unhandled error in MCP client:', error);
   process.exit(1);
 });
+
 ```
 
 # src/standalone/server.ts
@@ -6018,12 +6321,16 @@ main().catch(error => {
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { createLogger } from '../utils/logger';
+
+// Create a logger that writes to stderr
+const logger = createLogger('LegalContext');
 
 /**
  * Main entry point for the standalone LegalContext MCP server
  */
 async function main() {
-  console.log('Initializing LegalContext MCP server...');
+  logger.info('Initializing LegalContext MCP server...');
   
   // Create the MCP server
   const server = new McpServer({
@@ -6032,14 +6339,14 @@ async function main() {
   });
 
   // Register resources
-  console.log('Registering resources...');
+  logger.info('Registering resources...');
   
   // Info resource
   server.resource(
     'info',
     'info://server',
     (uri) => {
-      console.log('Handling info resource request:', uri.href);
+      logger.debug('Handling info resource request:', uri.href);
       return {
         contents: [{
           uri: uri.href,
@@ -6054,7 +6361,7 @@ async function main() {
     'document',
     new ResourceTemplate('document://{id}', { list: undefined }),
     (uri, params) => {
-      console.log('Handling document resource request:', uri.href, params);
+      logger.debug('Handling document resource request:', uri.href, params);
       const { id } = params;
       return {
         contents: [{
@@ -6066,7 +6373,7 @@ async function main() {
   );
 
   // Register tools
-  console.log('Registering tools...');
+  logger.info('Registering tools...');
   
   // Search tool
   server.tool(
@@ -6076,7 +6383,7 @@ async function main() {
       limit: z.number().optional()
     },
     (params) => {
-      console.log('Handling search tool request:', params);
+      logger.debug('Handling search tool request:', params);
       const { query, limit = 5 } = params;
       return {
         content: [{ 
@@ -6092,7 +6399,7 @@ async function main() {
     'echo',
     { message: z.string() },
     (params) => {
-      console.log('Handling echo tool request:', params);
+      logger.debug('Handling echo tool request:', params);
       return {
         content: [{ 
           type: "text", 
@@ -6103,32 +6410,94 @@ async function main() {
   );
 
   // Connect to stdio transport
-  console.log('Starting server with stdio transport...');
+  logger.info('Starting server with stdio transport...');
   const transport = new StdioServerTransport();
   
   try {
     await server.connect(transport);
-    console.log('MCP server successfully connected to transport');
+    logger.info('MCP server successfully connected to transport');
     
     // Keep the process alive
     process.stdin.resume();
     
     // Handle graceful shutdown
     process.on('SIGINT', () => {
-      console.log('Shutting down LegalContext MCP server...');
+      logger.info('Shutting down LegalContext MCP server...');
       process.exit(0);
     });
   } catch (error) {
-    console.error('Error connecting MCP server:', error);
+    logger.error('Error connecting MCP server:', error);
     process.exit(1);
   }
 }
 
 // Start the server
 main().catch(error => {
-  console.error('Unhandled error in MCP server:', error);
+  logger.error('Unhandled error in MCP server:', error);
   process.exit(1);
 });
+
+```
+
+# src/utils/logger.ts
+
+```ts
+// src/utils/logger.ts
+// Simple logger that writes to stderr
+
+/**
+ * Log level names
+ */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * Logger interface
+ */
+export interface Logger {
+  debug: (message: string, ...args: any[]) => void;
+  info: (message: string, ...args: any[]) => void;
+  warn: (message: string, ...args: any[]) => void;
+  error: (message: string, error?: Error) => void;
+}
+
+/**
+ * Create a logger that writes to stderr
+ * 
+ * @param namespace - The namespace for the logger
+ * @returns A logger instance
+ */
+export function createLogger(namespace: string): Logger {
+  return {
+    debug: (message: string, ...args: any[]) => {
+      process.stderr.write(`[${namespace}] [debug] ${message}\n`);
+      if (args.length > 0) {
+        process.stderr.write(`${JSON.stringify(args, null, 2)}\n`);
+      }
+    },
+    
+    info: (message: string, ...args: any[]) => {
+      process.stderr.write(`[${namespace}] [info] ${message}\n`);
+      if (args.length > 0) {
+        process.stderr.write(`${JSON.stringify(args, null, 2)}\n`);
+      }
+    },
+    
+    warn: (message: string, ...args: any[]) => {
+      process.stderr.write(`[${namespace}] [warn] ${message}\n`);
+      if (args.length > 0) {
+        process.stderr.write(`${JSON.stringify(args, null, 2)}\n`);
+      }
+    },
+    
+    error: (message: string, error?: Error) => {
+      process.stderr.write(`[${namespace}] [error] ${message}\n`);
+      if (error) {
+        process.stderr.write(`[${namespace}] [error] ${error.stack || error.message}\n`);
+      }
+    }
+  };
+}
+
 ```
 
 # test/.gitkeep
