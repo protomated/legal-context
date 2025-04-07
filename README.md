@@ -28,8 +28,8 @@ The current implementation includes:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/protomated/legalcontext.git
-cd legalcontext
+git clone https://github.com/protomated/legal-context.git
+cd legal-context
 ```
 
 2. Install dependencies:
@@ -125,4 +125,4 @@ LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
 
 ## Support
 
-For support, please open an issue on GitHub or contact us at ask@protomated.com.
+For support, please open an issue on GitHub or contact dele@protomated.com.
