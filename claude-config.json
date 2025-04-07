@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "bunx",
+      "args": [
+        "run",
+        "/path/to/legal-context/src/claude-mcp-server.ts"
+      ],
+      "cwd": ""
+    }
+  }
+}

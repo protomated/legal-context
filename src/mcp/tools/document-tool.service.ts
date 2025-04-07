@@ -127,7 +127,7 @@ export class DocumentToolService implements OnModuleInit {
           return {
             content: [{
               type: 'text',
-              text: `Document "${document.title}" processed successfully with ${document.chunks.length} chunks.`,
+              text: `Document "${document.title}" processed successfully.`,
             }],
           };
         } catch (error) {

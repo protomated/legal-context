@@ -35,12 +35,13 @@ export class DocumentResourceService implements OnModuleInit {
     server.resource(
       'document-list',
       new ResourceTemplate('documents://list/{filter}/{page}', { list: undefined }),
-      async (uri, { filter, page }) => {
+      async (uri, params: any) => {
+          const { filter, page } = params;
         this.logger.debug(`Handling document list resource request: ${uri.href}`);
 
         try {
-          const pageNum = parseInt(page || '1', 10);
-          const filterParams = filter ? JSON.parse(decodeURIComponent(filter)) : {};
+          const pageNum = parseInt(Array.isArray(page) ? page[0] : (page || '1'), 10);
+          const filterParams = filter ? JSON.parse(decodeURIComponent(Array.isArray(filter) ? filter[0] : filter)) : {};
 
           const documents = await this.clioDocumentService.listDocuments({
             ...filterParams,
@@ -82,26 +83,28 @@ ${doc.description ? `Description: ${doc.description}` : ''}`,
     server.resource(
       'document',
       new ResourceTemplate('document://{id}', { list: undefined }),
-      async (uri, { id }) => {
+      async (uri, params: any) => {
+          const { id } = params;
         this.logger.debug(`Handling document content resource request: ${uri.href}`);
 
         try {
           // Check if document exists in local database
-          let document = await this.documentRepository.findOne({ where: { clioId: id } });
+          const idStr = Array.isArray(id) ? id[0] : id;
+          let document = await this.documentRepository.findOne({ where: { clioId: idStr } });
 
           if (!document) {
             // Fetch document metadata from Clio
-            const documentMeta = await this.clioDocumentService.getDocument(id);
+            const documentMeta = await this.clioDocumentService.getDocument(idStr);
 
             // Download document content
-            const documentContent = await this.clioDocumentService.downloadDocument(id);
+            const documentContent = await this.clioDocumentService.downloadDocument(idStr);
 
             // Extract text
             const text = await this.textExtractorService.extract(documentContent, documentMeta.content_type);
 
             // Create document entity
             document = this.documentRepository.create({
-              clioId: id,
+              clioId: idStr,
               title: documentMeta.name,
               mimeType: documentMeta.content_type,
               metadata: documentMeta,
@@ -119,8 +122,8 @@ ${doc.description ? `Description: ${doc.description}` : ''}`,
             // Use cached document if available
             // In a real implementation, you would retrieve the processed text from your database
             // For this example, we'll download and process again
-            const documentMeta = await this.clioDocumentService.getDocument(id);
-            const documentContent = await this.clioDocumentService.downloadDocument(id);
+            const documentMeta = await this.clioDocumentService.getDocument(idStr);
+            const documentContent = await this.clioDocumentService.downloadDocument(idStr);
             const text = await this.textExtractorService.extract(documentContent, documentMeta.content_type);
 
             return {

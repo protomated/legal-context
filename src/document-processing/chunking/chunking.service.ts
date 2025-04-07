@@ -1,4 +1,3 @@
-// src/document-processing/chunking/chunking.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -24,8 +23,11 @@ export class ChunkingService {
    * Split document text into chunks with optional overlap
    */
   chunk(text: string, options?: ChunkingOptions): DocumentChunkData[] {
-    const chunkSize = options?.chunkSize || this.configService.get('documentProcessing.chunkSize');
-    const chunkOverlap = options?.chunkOverlap || this.configService.get('documentProcessing.chunkOverlap');
+    const defaultChunkSize = this.configService.get<number>('documentProcessing.chunkSize', 1000);
+    const defaultChunkOverlap = this.configService.get<number>('documentProcessing.chunkOverlap', 200);
+    
+    const chunkSize = options?.chunkSize ?? defaultChunkSize;
+    const chunkOverlap = options?.chunkOverlap ?? defaultChunkOverlap;
     const preserveParagraphs = options?.preserveParagraphs !== undefined ? options.preserveParagraphs : true;
 
     this.logger.debug(`Chunking document with size: ${chunkSize}, overlap: ${chunkOverlap}, preserveParagraphs: ${preserveParagraphs}`);

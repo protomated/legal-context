@@ -3,7 +3,6 @@ import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as readline from 'readline';
-import * as open from 'open';
 import { AppModule } from './app.module';
 import { ClioAuthService } from './clio/auth/clio-auth.service';
 
@@ -48,11 +47,8 @@ async function setup() {
     // Generate authorization URL
     const authUrl = `${configService.get('clio.apiUrl').replace('/api/v4', '')}/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}`;
 
-    logger.log('Opening browser for OAuth authorization...');
-    logger.log(`If the browser doesn't open automatically, please visit: ${authUrl}`);
-
-    // Open browser for authorization
-    await open(authUrl);
+    logger.log('Please open the following URL in your browser for OAuth authorization:');
+    logger.log(authUrl);
 
     // Prompt for authorization code
     rl.question('After authorizing, please enter the authorization code: ', async (code) => {
