@@ -27,6 +27,13 @@ export default () => {
       encryptionKey: process.env.ENCRYPTION_KEY || 'development-key',
     },
 
+    clio: {
+      clientId: process.env.CLIO_CLIENT_ID,
+      clientSecret: process.env.CLIO_CLIENT_SECRET,
+      redirectUri: process.env.CLIO_REDIRECT_URI || 'http://127.0.0.1:3000/clio/auth/callback',
+      apiUrl: process.env.CLIO_API_URL || 'https://app.clio.com/api/v4',
+    },
+
     documentProcessing: {
       maxDocumentSize: maxDocSize,
       chunkSize: chunkSize,

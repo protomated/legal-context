@@ -14,6 +14,15 @@ export class OAuthToken {
   @Column()
   expiresAt: Date;
 
+  @Column({ nullable: true })
+  scope: string;
+
+  @Column({ nullable: true })
+  userId: string;
+
+  @Column({ nullable: true })
+  organizationId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

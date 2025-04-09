@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OAuthToken } from '../database/entities/oauth-token.entity';
 import { ClioAuthService } from './auth/clio-auth.service';
+import { ClioAuthController } from './auth/clio-auth.controller';
 
 @Module({
   imports: [
@@ -11,11 +12,8 @@ import { ClioAuthService } from './auth/clio-auth.service';
     ConfigModule,
     TypeOrmModule.forFeature([OAuthToken]),
   ],
-  providers: [
-    ClioAuthService,
-  ],
-  exports: [
-    ClioAuthService,
-  ],
+  controllers: [ClioAuthController],
+  providers: [ClioAuthService],
+  exports: [ClioAuthService],
 })
 export class ClioModule {}
