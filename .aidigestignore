@@ -43,3 +43,7 @@ lerna-debug.log*
 # Temporary files
 tmp/
 temp/
+
+## DOCS
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
