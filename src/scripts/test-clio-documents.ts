@@ -2,7 +2,7 @@
  * Clio Documents Test Script
  *
  * This script tests the ClioDocumentService to ensure it can connect to Clio
- * and retrieve document information.
+ * and retrieve document information
  */
 
 import { NestFactory } from '@nestjs/core';
@@ -103,16 +103,16 @@ async function testListDocuments(
 ) {
   try {
     logger.log('Testing document listing...');
-    
+
     // Get first page of documents
     const documents = await clioDocumentService.listDocuments({
       limit: 10,
       fields: 'id,name,content_type,created_at,updated_at',
     });
-    
+
     // Display results
     logger.log(`Found ${documents.meta.paging.total_entries} total documents (showing first ${documents.data.length}):`);
-    
+
     // Format and display each document
     documents.data.forEach((doc, index) => {
       logger.log(`${index + 1}. ${doc.name} (${doc.content_type})`);
@@ -121,7 +121,7 @@ async function testListDocuments(
       logger.log(`   Updated: ${new Date(doc.updated_at).toLocaleString()}`);
       logger.log('---');
     });
-    
+
     rl.close();
     process.exit(0);
   } catch (error) {
@@ -142,34 +142,34 @@ async function testGetDocument(
   rl.question('Enter document ID: ', async (documentId) => {
     try {
       logger.log(`Getting details for document ID: ${documentId}`);
-      
+
       // Get document details
       const document = await clioDocumentService.getDocument(documentId);
-      
+
       // Display document details
       logger.log('Document details:');
       logger.log(`Name: ${document.name}`);
       logger.log(`Type: ${document.content_type}`);
       logger.log(`Created: ${new Date(document.created_at).toLocaleString()}`);
       logger.log(`Updated: ${new Date(document.updated_at).toLocaleString()}`);
-      
+
       if (document.description) {
         logger.log(`Description: ${document.description}`);
       }
-      
+
       if (document.size) {
         logger.log(`Size: ${document.size} bytes`);
       }
-      
+
       // Get document path
       const path = await clioDocumentMetadataService.getDocumentPath(documentId);
       logger.log(`Path: ${path}`);
-      
+
       // Normalize metadata
       const metadata = clioDocumentMetadataService.normalizeDocumentMetadata(document);
       logger.log('Normalized metadata:');
       logger.log(JSON.stringify(metadata, null, 2));
-      
+
       rl.close();
       process.exit(0);
     } catch (error) {
@@ -190,20 +190,20 @@ async function testDocumentHierarchy(
   rl.question('Enter folder ID (or leave blank for root): ', async (folderId) => {
     try {
       const targetFolder = folderId || 'root';
-      
+
       logger.log(`Getting document hierarchy for folder: ${targetFolder}`);
-      
+
       // Get document hierarchy
       const hierarchy = await clioDocumentMetadataService.getDocumentHierarchy(targetFolder);
-      
+
       // Display results
       logger.log('Document hierarchy:');
       logger.log(JSON.stringify(hierarchy, null, 2));
-      
+
       // Report counts
       logger.log(`Folders: ${hierarchy.folders.length}`);
       logger.log(`Documents: ${hierarchy.documents.length}`);
-      
+
       rl.close();
       process.exit(0);
     } catch (error) {
@@ -224,22 +224,22 @@ async function testRecentDocuments(
   rl.question('Enter number of days to look back (default 7): ', async (daysStr) => {
     try {
       const days = daysStr ? parseInt(daysStr, 10) : 7;
-      
+
       if (isNaN(days) || days <= 0) {
         logger.error('Invalid number of days. Please enter a positive number.');
         rl.close();
         process.exit(1);
         return;
       }
-      
+
       logger.log(`Getting documents modified in the last ${days} days...`);
-      
+
       // Get recent documents
       const documents = await clioDocumentMetadataService.getRecentlyModifiedDocuments(days);
-      
+
       // Display results
       logger.log(`Found ${documents.length} documents modified in the last ${days} days:`);
-      
+
       // Format and display each document
       documents.forEach((doc, index) => {
         logger.log(`${index + 1}. ${doc.name} (${doc.content_type})`);
@@ -247,7 +247,7 @@ async function testRecentDocuments(
         logger.log(`   Updated: ${new Date(doc.updated_at).toLocaleString()}`);
         logger.log('---');
       });
-      
+
       rl.close();
       process.exit(0);
     } catch (error) {
@@ -268,16 +268,16 @@ async function testSearchDocuments(
   rl.question('Enter search query: ', async (query) => {
     try {
       logger.log(`Searching for documents matching: "${query}"`);
-      
+
       // Search documents
       const searchResults = await clioDocumentService.searchDocuments(query, {
         limit: 10,
         fields: 'id,name,content_type,created_at,updated_at',
       });
-      
+
       // Display results
       logger.log(`Found ${searchResults.meta.paging.total_entries} matching documents (showing first ${searchResults.data.length}):`);
-      
+
       // Format and display each document
       searchResults.data.forEach((doc, index) => {
         logger.log(`${index + 1}. ${doc.name} (${doc.content_type})`);
@@ -286,7 +286,7 @@ async function testSearchDocuments(
         logger.log(`   Updated: ${new Date(doc.updated_at).toLocaleString()}`);
         logger.log('---');
       });
-      
+
       rl.close();
       process.exit(0);
     } catch (error) {

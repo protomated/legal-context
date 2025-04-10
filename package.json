@@ -18,6 +18,7 @@
     "digest": "ai-digest",
     "test:clio:auth": "bun run src/scripts/test-clio-auth.ts",
     "test:clio:docs": "bun run src/scripts/test-clio-documents.ts",
+    "test:mcp:docs": "bun run src/scripts/test-mcp-document-integration.ts",
     "setup:clio:auth": "bun run src/scripts/test-clio-auth.ts"
   },
   "author": "Protomated",

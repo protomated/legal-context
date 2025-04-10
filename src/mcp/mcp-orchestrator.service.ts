@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { McpServerService } from './mcp-server.service';
 import { McpResourcesService } from './mcp-resources.service';
 import { McpToolsService } from './mcp-tools.service';
+import { DocumentResourceService } from './resources/document-resource.service';
+import { DocumentToolService } from './tools/document-tool.service';
 
 /**
  * Service that orchestrates the initialization of MCP components.
@@ -18,6 +20,8 @@ export class McpOrchestratorService implements OnModuleInit, OnModuleDestroy {
     private readonly mcpResourcesService: McpResourcesService,
     private readonly mcpToolsService: McpToolsService,
     private readonly configService: ConfigService,
+    private readonly documentResourceService: DocumentResourceService,
+    private readonly documentToolService: DocumentToolService,
   ) {}
 
   /**
@@ -31,19 +35,29 @@ export class McpOrchestratorService implements OnModuleInit, OnModuleDestroy {
       const environment = this.configService.get<string>('environment');
       this.logger.log(`Running in ${environment} environment`);
 
-      // 1. Register resources
-      this.logger.log('Registering MCP resources...');
+      // 1. Register basic resources
+      this.logger.log('Registering basic MCP resources...');
       await this.mcpResourcesService.registerResources();
 
-      // 2. Register tools
-      this.logger.log('Registering MCP tools...');
+      // 2. Register basic tools
+      this.logger.log('Registering basic MCP tools...');
       await this.mcpToolsService.registerTools();
+      
+      // 3. Register document-specific resources
+      this.logger.log('Registering document resources...');
+      // No need to explicitly call as the service implements OnModuleInit
+      // await this.documentResourceService.registerResources();
+      
+      // 4. Register document-specific tools
+      this.logger.log('Registering document tools...');
+      // No need to explicitly call as the service implements OnModuleInit
+      // await this.documentToolService.registerTools();
 
-      // 3. Connect the server to transport
+      // 5. Connect the server to transport
       this.logger.log('Connecting MCP server to transport...');
       await this.mcpServerService.connect();
 
-      // 4. Set up health check if in production
+      // 6. Set up health check if in production
       if (environment === 'production') {
         this.setupHealthCheck();
       }
