@@ -9,14 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Development stage
 FROM base AS development
 WORKDIR /app
-COPY package.json bun.lockb ./
+COPY package.json ./
+# Check if bun.lockb exists, if not that's fine
+COPY bun.lockb* ./
 RUN bun install
 # We don't copy the source code here as we'll use volume mounts for development
 
 # Production dependencies stage
 FROM base AS production-deps
 WORKDIR /app
-COPY package.json bun.lockb ./
+COPY package.json ./
+# Check if bun.lockb exists, if not that's fine
+COPY bun.lockb* ./
 RUN bun install --production
 
 # Build stage

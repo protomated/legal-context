@@ -5,6 +5,7 @@ export default () => {
   const maxDocSize = process.env.MAX_DOCUMENT_SIZE ? parseInt(process.env.MAX_DOCUMENT_SIZE, 10) : 5 * 1024 * 1024;
   const chunkSize = process.env.CHUNK_SIZE ? parseInt(process.env.CHUNK_SIZE, 10) : 1000;
   const chunkOverlap = process.env.CHUNK_OVERLAP ? parseInt(process.env.CHUNK_OVERLAP, 10) : 200;
+  const healthCheckInterval = process.env.HEALTH_CHECK_INTERVAL_MS ? parseInt(process.env.HEALTH_CHECK_INTERVAL_MS, 10) : 60000;
 
   return {
     port,
@@ -38,6 +39,11 @@ export default () => {
       maxDocumentSize: maxDocSize,
       chunkSize: chunkSize,
       chunkOverlap: chunkOverlap,
+    },
+
+    healthCheck: {
+      intervalMs: healthCheckInterval,
+      enabled: process.env.ENABLE_HEALTH_CHECK === 'true',
     },
   };
 };

@@ -14,7 +14,7 @@ This document outlines the development roadmap for LegalContext, focusing on the
 
 ### Epic 2: Clio API Integration (Estimated: 2 weeks)
 
-- 🔄 Story 2.1: Implement OAuth 2.0 Authentication Flow
+- ✅ Story 2.1: Implement OAuth 2.0 Authentication Flow
 - 🔄 Story 2.2: Develop Document API Wrapper
 - 🔄 Story 2.3: Build Document Metadata Parser
 - 🔄 Story 2.4: Add Document Access Controls

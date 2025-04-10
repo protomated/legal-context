@@ -1,14 +1,13 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, OneToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, OneToOne } from 'typeorm';
 import { Document } from './document.entity';
-import { DocumentVector } from './document-vector.entity';
 
 @Entity()
 export class DocumentChunk {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Document, document => document.chunks, { onDelete: 'CASCADE' })
-  document: Document;
+  @ManyToOne('Document', 'chunks', { onDelete: 'CASCADE' })
+  document: any; // Using 'any' to avoid circular reference issue
 
   @Column('text')
   content: string;
@@ -19,6 +18,6 @@ export class DocumentChunk {
   @Column('int')
   endIndex: number;
 
-  @OneToOne(() => DocumentVector, vector => vector.chunk, { cascade: true })
-  vector: DocumentVector;
+  @OneToOne('DocumentVector', 'chunk', { cascade: true })
+  vector: any; // Using 'any' to avoid circular reference issue
 }

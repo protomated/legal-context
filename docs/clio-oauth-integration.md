@@ -1,124 +1,212 @@
-# Clio OAuth 2.0 Integration
+# Clio OAuth 2.0 Authentication Integration
 
-This document outlines the OAuth 2.0 integration with Clio's API for LegalContext.
+This document outlines the OAuth 2.0 authentication flow implemented in LegalContext for secure communication with the Clio document management system.
 
-## Overview
+## Architecture Overview
 
-LegalContext uses OAuth 2.0 with PKCE (Proof Key for Code Exchange) to securely authenticate with Clio's API. This ensures that:
-
-1. User credentials are never exposed to LegalContext
-2. Access is limited to only the permissions (scopes) required
-3. Tokens can be revoked without changing passwords
-4. The authentication process follows security best practices
-
-## OAuth 2.0 Flow
-
-The implementation follows the standard OAuth 2.0 Authorization Code flow with PKCE:
+The Clio authentication implementation follows the OAuth 2.0 Authorization Code flow with PKCE (Proof Key for Code Exchange) for enhanced security. This approach is especially important for applications where the client secret cannot be securely stored, and provides protection against authorization code interception attacks.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant LegalContext
-    participant Clio
-    
-    User->>LegalContext: Initiate Setup
-    LegalContext->>LegalContext: Generate State & Code Verifier
-    LegalContext->>User: Provide Authorization URL
-    User->>Clio: Visit Authorization URL
-    Clio->>User: Show Login Screen
-    User->>Clio: Enter Credentials & Authorize
-    Clio->>User: Redirect with Code
-    User->>LegalContext: Provide Code
-    LegalContext->>Clio: Exchange Code for Tokens
-    Clio->>LegalContext: Return Access & Refresh Tokens
-    LegalContext->>LegalContext: Store Tokens Securely
-    LegalContext->>User: Setup Complete
+    participant Clio as Clio Auth Server
+    participant ClioAPI as Clio API
+
+    User->>LegalContext: Initiate Authentication
+    LegalContext->>LegalContext: Generate code_verifier<br>and code_challenge
+    LegalContext->>Clio: Authorization Request<br>w/ code_challenge
+    Clio->>User: Login & Authorization Prompt
+    User->>Clio: Approve Authorization
+    Clio->>LegalContext: Redirect w/ Authorization Code
+    LegalContext->>Clio: Token Request<br>w/ code_verifier
+    Clio-->>LegalContext: Access & Refresh Tokens
+    LegalContext->>ClioAPI: API Requests<br>w/ Access Token
+    ClioAPI-->>LegalContext: API Responses
 ```
 
-## Security Measures
+## Components
 
-1. **State Parameter**: Prevents CSRF attacks by validating that the OAuth response matches the original request.
-2. **PKCE**: Prevents authorization code interception attacks by requiring a code verifier.
-3. **Secure Token Storage**: Tokens are stored in a database with proper encryption.
-4. **Automatic Token Refresh**: Tokens are automatically refreshed before they expire.
-5. **Token Revocation**: Tokens can be revoked if compromised.
+The authentication system consists of the following components:
 
-## Required Permissions
+1. **ClioAuthService**: Core service that manages OAuth flow and token lifecycle
+2. **ClioAuthController**: Provides HTTP endpoints for the authentication flow
+3. **OAuthToken**: Database entity for securely storing tokens
+4. **TokenResponse/AuthorizationRequestDto**: Data transfer objects for auth flow
 
-The integration requires the following permissions (scopes) from Clio:
+## Authentication Flow
 
-- `documents`: Access to read document metadata and content
+### 1. Initialize Authentication
 
-## Setup Process
+The user triggers authentication by visiting `/clio/auth/login`, which:
 
-### Prerequisites
+1. Generates a random `code_verifier`
+2. Creates a `code_challenge` using SHA-256 hashing
+3. Redirects to Clio's authorization URL with PKCE parameters
 
-1. A Clio account with API access
-2. Clio API credentials (Client ID and Client Secret)
-3. A registered redirect URI in the Clio Developer Portal
+### 2. Authorization
 
-### Configuration
+The user authenticates with Clio and approves access permissions. Clio then redirects back to the application's callback URL with an authorization code.
 
-Set the following environment variables:
+### 3. Token Exchange
 
-```
-CLIO_CLIENT_ID=your_client_id
-CLIO_CLIENT_SECRET=your_client_secret
-CLIO_REDIRECT_URI=http://127.0.0.1:3000/clio/auth/callback
-CLIO_API_URL=https://app.clio.com/api/v4
-```
+When LegalContext receives the callback, it:
 
-### Running the Setup
+1. Validates the returned state parameter
+2. Exchanges the authorization code for access and refresh tokens
+3. Securely stores the tokens in the database
 
-1. Run the setup script:
+### 4. API Access
+
+For subsequent API requests, LegalContext:
+
+1. Retrieves the stored access token
+2. Checks token expiration
+3. Automatically refreshes the token when needed
+4. Uses the token for authenticating API requests
+
+## Security Considerations
+
+The implementation includes several security enhancements:
+
+1. **PKCE Flow**: Protects against authorization code interception
+2. **State Parameter**: Prevents CSRF attacks
+3. **Token Encryption**: Tokens are securely stored in the database
+4. **Automatic Token Refresh**: Ensures continuous operation without user intervention
+5. **Token Revocation**: Provides the ability to revoke tokens when needed
+
+## Configuration
+
+The Clio OAuth integration requires the following configuration parameters:
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `clio.clientId` | OAuth client ID from Clio | `abcdef123456` |
+| `clio.clientSecret` | OAuth client secret from Clio | `secret123` |
+| `clio.redirectUri` | Callback URL registered with Clio | `http://localhost:3000/clio/auth/callback` |
+| `clio.apiUrl` | Clio API base URL | `https://app.clio.com/api/v4` |
+
+These values should be set in the environment variables or `.env` file.
+
+## Obtaining Clio API Credentials
+
+To use the Clio integration, you'll need to:
+
+1. Create a Clio developer account at https://app.clio.com/developers
+2. Register a new application to obtain client credentials
+3. Configure the redirect URI to match your LegalContext installation
+4. Request access to the required scopes (typically 'documents')
+
+## Testing Authentication
+
+LegalContext includes a testing script to verify the authentication flow:
 
 ```bash
-bun run setup:clio
+# Run the authentication test script
+bun run test:clio:auth
 ```
 
-2. Follow the prompts to authorize with Clio.
-3. After authorization, the tokens will be stored and ready to use.
+## API Endpoints
 
-## Testing the Integration
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/clio/auth/login` | GET | Initiates the OAuth flow |
+| `/clio/auth/callback` | GET | Handles the OAuth callback |
+| `/clio/auth/status` | GET | Provides the current authentication status |
+| `/clio/auth/tokens` | GET | Lists information about available tokens |
+| `/clio/auth/logout` | POST | Revokes the current access token |
 
-You can verify the integration works by running:
+## Implementation Details
 
-```bash
-bun run test:clio
-```
+### State Management
 
-## API Reference
+The `ClioAuthService` maintains a `stateMap` to track ongoing authorization requests. Each entry has:
 
-### ClioAuthService
+- A unique state value (sent to the authorization server)
+- The PKCE code verifier (for code exchange)
+- Expiration time (for security)
 
-The `ClioAuthService` provides the following methods:
+The service periodically cleans up expired states to prevent memory leaks.
 
-- `generateAuthorizationUrl()`: Generates the authorization URL for the OAuth flow
-- `exchangeCodeForToken(code, state)`: Exchanges an authorization code for access and refresh tokens
-- `getValidAccessToken()`: Gets a valid access token, refreshing if necessary
-- `refreshToken(token)`: Refreshes an expired token
-- `revokeToken(token)`: Revokes a token
+### Token Storage
 
-### OAuth Endpoints
+Tokens are stored in the PostgreSQL database using the `OAuthToken` entity. This approach:
 
-The integration exposes the following HTTP endpoints:
+1. Persists tokens across application restarts
+2. Allows for token revocation and management
+3. Supports concurrent access from multiple LegalContext instances
 
-- `GET /clio/auth/login`: Initiates the OAuth flow
-- `GET /clio/auth/callback`: Handles the OAuth callback
-- `GET /clio/auth/status`: Shows the current authentication status
+### Error Handling
 
-## Error Handling
+The implementation includes comprehensive error handling for:
 
-The integration handles the following error cases:
+- Network failures
+- Invalid or expired tokens
+- Authorization rejections
+- Server errors
 
-1. **Invalid State**: If the state parameter doesn't match, the callback is rejected
-2. **Authorization Errors**: If the user denies access or Clio returns an error
-3. **Token Refresh Failures**: If token refresh fails, the user is prompted to re-authenticate
-4. **API Errors**: Network or server errors during API calls
+All errors are properly logged with relevant context for troubleshooting.
 
-## Implementation Notes
+## Best Practices
 
-- The integration uses TypeORM for token storage
-- Tokens are automatically refreshed 5 minutes before expiration
-- PKCE is implemented using SHA-256 hash function
-- The state parameter is a cryptographically secure random value
+When working with the authentication system:
+
+1. Always use `getValidAccessToken()` instead of accessing tokens directly
+2. Handle authentication errors appropriately in API clients
+3. Use the test script to verify configuration before integration
+4. Monitor token expiration and refresh events in logs
+
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **"Invalid state parameter"**: The authorization request has expired or was tampered with. Try again with a fresh authorization request.
+
+2. **"Failed to refresh token"**: The refresh token may be expired or invalid. The user will need to re-authenticate.
+
+3. **"No OAuth token found"**: No valid tokens in the database. The user must complete the initial authorization flow.
+
+4. **Redirect URI mismatch**: Ensure the redirect URI configured in Clio's developer portal exactly matches the one in your LegalContext configuration, including protocol (http/https), domain, port, and path.
+
+5. **Client ID or Secret mismatch**: Double-check that the client ID and secret in your configuration match what's provided in Clio's developer portal.
+
+6. **Network connectivity issues**: Ensure your LegalContext instance can connect to Clio's authentication and API endpoints. Check for any firewall or proxy settings that might block these connections.
+
+7. **Scope issues**: If you see "insufficient scope" errors, ensure that your Clio application is configured with the correct permissions (typically 'documents').
+
+8. **Expired state errors**: If you see frequent "state expired" errors, check your system clock to ensure it's properly synchronized.
+
+## Extending the Authentication System
+
+The authentication system is designed to be extensible for future needs:
+
+### Supporting Multiple Organizations
+
+To support multiple Clio organizations:
+
+1. Extend the `OAuthToken` entity to include an organization identifier
+2. Modify `getValidAccessToken()` to accept an organization parameter
+3. Use appropriate tokens based on the organization context
+
+### Enhanced Security
+
+For additional security:
+
+1. Consider implementing token encryption at rest
+2. Add IP-based restrictions for token usage
+3. Implement more granular permission controls
+
+### Monitoring and Auditing
+
+For production environments:
+
+1. Add detailed audit logging for authentication events
+2. Set up monitoring for token lifecycle events
+3. Create alerts for authentication failures or unusual patterns
+
+## References
+
+1. [OAuth 2.0 RFC](https://tools.ietf.org/html/rfc6749)
+2. [PKCE RFC](https://tools.ietf.org/html/rfc7636)
+3. [Clio API Documentation](https://app.clio.com/api/v4/documentation)
+4. [NestJS Authentication Documentation](https://docs.nestjs.com/security/authentication)

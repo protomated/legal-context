@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { McpServerService } from './mcp-server.service';
 import { McpResourcesService } from './mcp-resources.service';
 import { McpToolsService } from './mcp-tools.service';
@@ -17,6 +17,7 @@ import { McpOrchestratorService } from './mcp-orchestrator.service';
     McpResourcesService,
     McpToolsService,
     McpOrchestratorService,
+    ConfigService,
   ],
   exports: [
     McpServerService,

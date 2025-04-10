@@ -60,11 +60,18 @@ export class ClioAuthService {
     const { codeVerifier, codeChallenge } = this.generatePKCE();
 
     // Store state and code verifier
+    // Create expiration time (10 minutes from now)
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt);
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+    
     this.stateMap.set(state, {
       state,
       code_verifier: codeVerifier,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
+      created_at: createdAt,
+      expires_at: expiresAt,
     });
 
     // Build authorization URL
@@ -105,17 +112,22 @@ export class ClioAuthService {
 
       const tokenUrl = apiUrl.replace('/api/v4', '/oauth/token');
 
+      // Create URLSearchParams to properly encode form data
+      const params = new URLSearchParams();
+      params.append('client_id', clientId);
+      params.append('client_secret', clientSecret);
+      params.append('grant_type', 'authorization_code');
+      params.append('code', code);
+      params.append('redirect_uri', redirectUri);
+      params.append('code_verifier', storedRequest.code_verifier);
+      
+      this.logger.debug(`Token request params: ${params.toString()}`);
+      this.logger.debug(`Token URL: ${tokenUrl}`);
+      
       const response = await lastValueFrom(
         this.httpService.post<TokenResponse>(
           tokenUrl,
-          {
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: redirectUri,
-            code_verifier: storedRequest.code_verifier
-          },
+          params.toString(),
           {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -141,7 +153,22 @@ export class ClioAuthService {
       return this.tokenRepository.save(token);
     } catch (error) {
       this.logger.error(`Authentication failed: ${error.message}`, error.stack);
-      throw new Error(`Failed to authenticate with Clio: ${error.message}`);
+      
+      // Add more detailed error information if available
+      if (error.response) {
+        // The request was made and the server responded with a status code outside of 2xx range
+        this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(`Response status: ${error.response.status}`);
+        this.logger.error(`Response headers: ${JSON.stringify(error.response.headers)}`);
+        throw new Error(`Failed to authenticate with Clio: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        // The request was made but no response was received
+        this.logger.error('No response received from Clio API');
+        throw new Error('Failed to authenticate with Clio: No response received');
+      } else {
+        // Something happened in setting up the request
+        throw new Error(`Failed to authenticate with Clio: ${error.message}`);
+      }
     }
   }
 
@@ -155,11 +182,18 @@ export class ClioAuthService {
     const { codeVerifier } = this.generatePKCE();
 
     // Create a temporary request object
+    // Create expiration time (10 minutes from now)
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt);
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+    
     this.stateMap.set(state, {
       state,
       code_verifier: codeVerifier,
       code_challenge: '',
       code_challenge_method: 'S256',
+      created_at: createdAt,
+      expires_at: expiresAt,
     });
 
     return this.exchangeCodeForToken(code, state);
@@ -180,15 +214,19 @@ export class ClioAuthService {
 
       const tokenUrl = apiUrl.replace('/api/v4', '/oauth/token');
 
+      // Create URLSearchParams for form data
+      const params = new URLSearchParams();
+      params.append('client_id', clientId);
+      params.append('client_secret', clientSecret);
+      params.append('grant_type', 'refresh_token');
+      params.append('refresh_token', token.refreshToken);
+      
+      this.logger.debug(`Refresh token request params: ${params.toString()}`);
+      
       const response = await lastValueFrom(
         this.httpService.post<TokenResponse>(
           tokenUrl,
-          {
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: 'refresh_token',
-            refresh_token: token.refreshToken,
-          },
+          params.toString(),
           {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -262,17 +300,22 @@ export class ClioAuthService {
 
       const revokeUrl = apiUrl.replace('/api/v4', '/oauth/token/revoke');
 
+      // Create URLSearchParams for form data
+      const params = new URLSearchParams();
+      params.append('client_id', clientId);
+      params.append('client_secret', clientSecret);
+      params.append('token', token.accessToken);
+      
+      this.logger.debug(`Revoking token ID: ${token.id}`);
+      
       await lastValueFrom(
         this.httpService.post(
           revokeUrl,
-          {
-            client_id: clientId,
-            client_secret: clientSecret,
-            token: token.accessToken,
-          },
+          params.toString(),
           {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
+              'Accept': 'application/json',
             },
           },
         )
@@ -280,9 +323,45 @@ export class ClioAuthService {
 
       // Remove the token from the database
       await this.tokenRepository.remove(token);
+      this.logger.log(`Token ID: ${token.id} successfully revoked and removed from database`);
     } catch (error) {
       this.logger.error(`Token revocation failed: ${error.message}`, error.stack);
       throw new Error(`Failed to revoke token: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Get information about all active tokens
+   */
+  async getTokenInfo(): Promise<any[]> {
+    try {
+      const tokens = await this.tokenRepository.find({
+        order: { createdAt: 'DESC' },
+      });
+      
+      return tokens.map(token => ({
+        id: token.id,
+        expiresAt: token.expiresAt,
+        isExpired: token.expiresAt < new Date(),
+        scope: token.scope || 'unknown',
+        createdAt: token.createdAt,
+      }));
+    } catch (error) {
+      this.logger.error(`Failed to get token info: ${error.message}`, error.stack);
+      throw new Error(`Unable to get token information: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Check if we have any valid tokens
+   */
+  async hasValidToken(): Promise<boolean> {
+    try {
+      // Just try to get a valid token
+      await this.getValidAccessToken();
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 }

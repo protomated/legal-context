@@ -5,7 +5,7 @@ LegalContext is an open-source Model Context Protocol (MCP) server that creates 
 ## Project Status
 
 ⚠️ **Development Status**: This project is in active development. Core MCP functionality is implemented, but document management integration is still in progress.
-about
+
 ## Core Functionality
 
 The current implementation includes:
@@ -22,6 +22,7 @@ The current implementation includes:
 
 - [Bun](https://bun.sh/) 1.0 or higher
 - [Claude Desktop](https://claude.ai/desktop) (for integration testing)
+- Clio Developer Account (for API access)
 
 ### Installation
 
@@ -38,7 +39,46 @@ cd legal-context
 bun install
 ```
 
-3. Build the project:
+3. Configure OAuth for Clio API:
+
+   a. Create a `.env.local` file in the project root:
+   ```
+   # Clio OAuth Configuration
+   CLIO_CLIENT_ID=your_client_id_here
+   CLIO_CLIENT_SECRET=your_client_secret_here
+   CLIO_REDIRECT_URI=http://127.0.0.1:3000/clio/auth/callback
+   CLIO_API_URL=https://app.clio.com/api/v4
+   
+   # Security Configuration
+   ENCRYPTION_KEY=your_random_32_character_string_here
+   
+   # Database Configuration
+   DATABASE_HOST=localhost
+   DATABASE_PORT=5432
+   DATABASE_USERNAME=postgres
+   DATABASE_PASSWORD=postgres
+   DATABASE_NAME=legalcontext_dev
+   ```
+
+   b. Obtain Clio API credentials:
+   - Log in to your Clio Developer account at https://app.clio.com/settings/developer/applications
+   - Create a new application with the following settings:
+     - Name: LegalContext
+     - Redirect URI: http://127.0.0.1:3000/clio/auth/callback
+     - Scopes: documents
+   - Copy the Client ID and Client Secret to your `.env.local` file
+
+   c. Run the OAuth setup script to authenticate with Clio:
+   ```bash
+   bun run start:dev
+   ```
+
+   d. In a separate terminal, run the Clio authentication setup:
+   ```bash
+   bun run test:clio:auth
+   ```
+
+4. Build the project:
 
 ```bash
 bun run build
@@ -52,6 +92,12 @@ Start the server with:
 bun run start
 ```
 
+For development with auto-reload:
+
+```bash
+bun run start:dev
+```
+
 ### Testing the MCP Server
 
 You can test the MCP server using the included test client:
@@ -61,6 +107,34 @@ bun run test:client
 ```
 
 This will start the server and connect a test client that will verify the basic functionality.
+
+### Configuring Claude Desktop
+
+1. Install Claude Desktop from https://claude.ai/desktop
+2. Create a `claude-config.json` file in your Claude Desktop configuration directory:
+   - Windows: `%APPDATA%\Claude\claude-config.json`
+   - macOS: `~/Library/Application Support/Claude/claude-config.json`
+   - Linux: `~/.config/Claude/claude-config.json`
+
+3. Add the following configuration (adjust the path to your LegalContext installation):
+```json
+{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "bunx",
+      "args": [
+        "run",
+        "start",
+        "--prefix",
+        "/path/to/legal-context"
+      ],
+      "cwd": "/path/to/legal-context"
+    }
+  }
+}
+```
+
+4. Restart Claude Desktop
 
 ## Architecture
 
