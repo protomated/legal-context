@@ -3,6 +3,8 @@ import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { McpServerService } from '../mcp-server.service';
 import { ClioDocumentService } from '../../clio/api/clio-document.service';
 import { ClioDocumentMetadataService } from '../../clio/api/clio-document-metadata.service';
+import { DocumentAccessControlService } from '../../clio/access/document-access-control.service';
+import { DocumentAccessDeniedError } from '../../clio/dto/document.dto';
 import { TextExtractorService } from '../../document-processing/extractors/text-extractor.service';
 import { DocumentProcessorService } from '../../document-processing/document-processor.service';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -24,6 +26,7 @@ export class DocumentResourceService implements OnModuleInit {
     private readonly clioDocumentMetadataService: ClioDocumentMetadataService, 
     private readonly textExtractorService: TextExtractorService,
     private readonly documentProcessorService: DocumentProcessorService,
+    private readonly accessControlService: DocumentAccessControlService,
     @InjectRepository(Document)
     private readonly documentRepository: Repository<Document>,
     @InjectRepository(DocumentChunk)
@@ -94,12 +97,15 @@ export class DocumentResourceService implements OnModuleInit {
           }
           
           // Get documents list from Clio
-          const result = await this.clioDocumentService.listDocuments({
+          let result = await this.clioDocumentService.listDocuments({
             ...filterParams,
             page: pageNum,
             limit: 20,
             fields: 'id,name,content_type,created_at,updated_at,description,matter',
           });
+          
+          // Apply access controls to filter documents by permission
+          result.data = await this.accessControlService.filterDocumentsByAccess(result.data);
           
           // Format the response
           let content = `# Available Documents (Page ${pageNum})\n\n`;
@@ -190,6 +196,9 @@ export class DocumentResourceService implements OnModuleInit {
         this.logger.debug(`Handling document content resource request for ID: ${id}`);
         
         try {
+        // Check access permission first
+          await this.accessControlService.checkDocumentAccess(id);
+          
           // Process and prepare the document
           const document = await this.documentProcessorService.processDocument(id);
           
@@ -246,7 +255,7 @@ export class DocumentResourceService implements OnModuleInit {
         
         try {
           // Search documents in Clio
-          const result = await this.clioDocumentService.searchDocuments(
+          let result = await this.clioDocumentService.searchDocuments(
             decodeURIComponent(query),
             {
               page: pageNum,
@@ -254,6 +263,9 @@ export class DocumentResourceService implements OnModuleInit {
               fields: 'id,name,content_type,created_at,updated_at,description,matter',
             }
           );
+          
+          // Apply access controls to filter search results
+          result.data = await this.accessControlService.filterDocumentsByAccess(result.data);
           
           // Format the response
           let content = `# Search Results for "${decodeURIComponent(query)}"\n\n`;
@@ -331,12 +343,15 @@ export class DocumentResourceService implements OnModuleInit {
         
         try {
           // Get matter documents from metadata service
-          const documents = await this.clioDocumentMetadataService.getDocumentsByMatter(matter_id, {
+          let documents = await this.clioDocumentMetadataService.getDocumentsByMatter(matter_id, {
             limit: 20,
             page: pageNum,
             sort: 'updated_at',
             order: 'desc'
           });
+          
+          // Apply access controls to filter documents
+          documents = await this.accessControlService.filterDocumentsByAccess(documents);
           
           if (documents.length === 0) {
             return {

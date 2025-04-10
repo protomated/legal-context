@@ -8,6 +8,7 @@ import { ClioAuthController } from './auth/clio-auth.controller';
 import { ClioDocumentService } from './api/clio-document.service';
 import { ClioDocumentMetadataService } from './api/clio-document-metadata.service';
 import { ClioDocumentBatchService } from './api/clio-document-batch.service';
+import { DocumentAccessControlService } from './access/document-access-control.service';
 
 /**
  * Clio integration module
@@ -24,13 +25,15 @@ import { ClioDocumentBatchService } from './api/clio-document-batch.service';
     ClioAuthService, 
     ClioDocumentService,
     ClioDocumentMetadataService,
-    ClioDocumentBatchService
+    ClioDocumentBatchService,
+    DocumentAccessControlService
   ],
   exports: [
     ClioAuthService, 
     ClioDocumentService,
     ClioDocumentMetadataService,
-    ClioDocumentBatchService
+    ClioDocumentBatchService,
+    DocumentAccessControlService
   ],
 })
 export class ClioModule {}

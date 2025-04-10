@@ -8,6 +8,8 @@ import { TextExtractorService } from './extractors/text-extractor.service';
 import { ChunkingService } from './chunking/chunking.service';
 import { EmbeddingService } from './embedding/embedding.service';
 import { ClioDocumentService } from '../clio/api/clio-document.service';
+import { DocumentAccessControlService } from '../clio/access/document-access-control.service';
+import { DocumentAccessDeniedError } from '../clio/dto/document.dto';
 
 @Injectable()
 export class DocumentProcessorService {
@@ -22,6 +24,7 @@ export class DocumentProcessorService {
     private readonly chunkingService: ChunkingService,
     private readonly embeddingService: EmbeddingService,
     private readonly clioDocumentService: ClioDocumentService,
+    private readonly accessControlService: DocumentAccessControlService,
   ) {}
 
   /**
@@ -31,6 +34,8 @@ export class DocumentProcessorService {
     this.logger.debug(`Processing document ${clioDocumentId}`);
 
     try {
+      // Check access permissions before processing
+      await this.accessControlService.checkDocumentAccess(clioDocumentId);
       // Check if document already exists
       let document = await this.documentRepository.findOne({
         where: { clioId: clioDocumentId },
@@ -126,13 +131,21 @@ export class DocumentProcessorService {
 
     try {
       // Simple search by title for demonstration
-      const documents = await this.documentRepository
+      let documents = await this.documentRepository
         .createQueryBuilder('document')
         .where('document.title ILIKE :query', { query: `%${query}%` })
-        .limit(limit)
+        .limit(limit * 2) // Fetch more to account for possible access filtering
         .getMany();
 
-      return documents;
+      // Apply access filtering
+      const clioDocumentIds = documents.map(doc => doc.clioId);
+      const accessResults = await this.accessControlService.checkBatchDocumentAccess(clioDocumentIds);
+      
+      // Filter documents by access
+      documents = documents.filter(doc => accessResults.get(doc.clioId) === true);
+      
+      // Apply final limit
+      return documents.slice(0, limit);
     } catch (error) {
       this.logger.error(`Error searching documents: ${error.message}`, error.stack);
       throw new Error(`Failed to search documents: ${error.message}`);

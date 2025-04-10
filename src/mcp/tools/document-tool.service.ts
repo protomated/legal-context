@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { McpServerService } from '../mcp-server.service';
 import { ClioDocumentService } from '../../clio/api/clio-document.service';
 import { ClioDocumentMetadataService } from '../../clio/api/clio-document-metadata.service';
+import { DocumentAccessControlService } from '../../clio/access/document-access-control.service';
+import { DocumentAccessDeniedError } from '../../clio/dto/document.dto';
 import { DocumentProcessorService } from '../../document-processing/document-processor.service';
 import { SearchService } from '../../document-processing/search/search.service';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,6 +27,7 @@ export class DocumentToolService implements OnModuleInit {
     private readonly documentProcessorService: DocumentProcessorService,
     private readonly searchService: SearchService,
     private readonly configService: ConfigService,
+    private readonly accessControlService: DocumentAccessControlService,
     @InjectRepository(Document)
     private readonly documentRepository: Repository<Document>,
   ) {}
@@ -83,12 +86,15 @@ export class DocumentToolService implements OnModuleInit {
 
         try {
           // Search documents in Clio
-          const result = await this.clioDocumentService.searchDocuments(query, {
+          let result = await this.clioDocumentService.searchDocuments(query, {
             limit,
             fields: 'id,name,content_type,created_at,updated_at,description,matter',
             matter_id,
           });
 
+          // Apply access controls to filter search results
+          result.data = await this.accessControlService.filterDocumentsByAccess(result.data);
+          
           // Format the response
           if (result.data.length === 0) {
             return {
@@ -157,6 +163,8 @@ export class DocumentToolService implements OnModuleInit {
         this.logger.debug(`Document processing tool called for ID: ${document_id}`);
 
         try {
+          // Check access permission first
+          await this.accessControlService.checkDocumentAccess(document_id);
           // Check if document already exists and is up to date
           let document = await this.documentRepository.findOne({
             where: { clioId: document_id },
@@ -213,6 +221,8 @@ export class DocumentToolService implements OnModuleInit {
         this.logger.debug(`Citation generation tool called for document ID: ${document_id}`);
 
         try {
+          // Check access permission first
+          await this.accessControlService.checkDocumentAccess(document_id);
           // Get document metadata
           const documentMeta = await this.clioDocumentService.getDocument(document_id);
 
@@ -276,6 +286,8 @@ export class DocumentToolService implements OnModuleInit {
 
         try {
           // Set up search options
+          // Note: Access control will be applied at the document processing level
+          // when documents are fetched from the database
           const searchOptions = {
             matter_id,
             limit,
