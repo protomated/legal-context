@@ -4,7 +4,7 @@ LegalContext is an open-source Model Context Protocol (MCP) server that creates 
 
 ## Project Status
 
-⚠️ **Development Status**: This project is in active development. Core MCP functionality is implemented, but document management integration is still in progress.
+⚠️ **Development Status**: This project is in active development. Core MCP functionality and Clio API integration are implemented, with document processing and additional features in progress.
 
 ## Core Functionality
 
@@ -15,6 +15,10 @@ The current implementation includes:
 - ✅ Example resources and tools
 - ✅ Configuration management
 - ✅ Testing infrastructure
+- ✅ OAuth 2.0 authentication with Clio
+- ✅ Secure document API integration with Clio
+- ✅ Document access control and permissions
+- ✅ Document metadata extraction and normalization
 
 ## Getting Started
 
@@ -98,7 +102,9 @@ For development with auto-reload:
 bun run start:dev
 ```
 
-### Testing the MCP Server
+### Testing
+
+#### MCP Server Testing
 
 You can test the MCP server using the included test client:
 
@@ -107,6 +113,26 @@ bun run test:client
 ```
 
 This will start the server and connect a test client that will verify the basic functionality.
+
+#### Clio API Integration Testing
+
+Verify your Clio integration with the following test scripts:
+
+```bash
+# Test Clio authentication
+bun run test:clio:auth
+
+# Test document listing and retrieval
+bun run test:clio:docs
+
+# Test document access control
+bun run test:clio:access
+
+# Test MCP-Clio integration
+bun run test:mcp:docs
+```
+
+These tests will verify that your Clio authentication is working, you can access documents, and that the MCP server can properly integrate with Clio documents.
 
 ### Configuring Claude Desktop
 
@@ -145,8 +171,21 @@ graph TB
     Claude[Claude Desktop] <--> |MCP/stdio| MCP[MCP Server]
     MCP --> Resources[MCP Resources]
     MCP --> Tools[MCP Tools]
-    Resources --> Clio[Clio API]
-    Tools --> Clio
+    
+    subgraph Clio Integration
+        Auth[ClioAuthService] --> |OAuth2.0| Clio[Clio API]
+        DocService[ClioDocumentService] --> Auth
+        MetaService[ClioDocumentMetadataService] --> DocService
+        BatchService[ClioDocumentBatchService] --> DocService
+        AccessControl[DocumentAccessControlService] --> DocService
+    end
+    
+    Resources --> DocService
+    Resources --> MetaService
+    Resources --> AccessControl
+    Tools --> DocService
+    Tools --> MetaService
+    Tools --> BatchService
 ```
 
 The system is designed to keep all document processing within the firm's security perimeter, with zero sensitive data transmitted to external servers.
@@ -161,30 +200,58 @@ Additional documentation can be found in the `docs` directory:
 
 ## Core Components
 
-### McpServerService
+### MCP Components
+
+#### McpServerService
 
 Manages the MCP server lifecycle and connection to Claude Desktop.
 
-### McpResourcesService
+#### McpResourcesService
 
 Handles registration and management of resources that provide document context.
 
-### McpToolsService
+#### McpToolsService
 
 Manages tools that enable Claude to perform actions like searching or retrieving documents.
 
-### McpOrchestratorService
+#### McpOrchestratorService
 
 Coordinates the initialization and operation of the MCP components.
+
+### Clio Integration Components
+
+#### ClioAuthService
+
+Manages OAuth 2.0 authentication with Clio, including token acquisition, refresh, and storage.
+
+#### ClioDocumentService
+
+Handles direct API interactions with Clio's document endpoints, providing CRUD operations for documents.
+
+#### ClioDocumentMetadataService
+
+Provides specialized metadata extraction, normalization, and organization of document information.
+
+#### ClioDocumentBatchService
+
+Offers batch operations for efficient handling of multiple documents from Clio.
+
+#### DocumentAccessControlService
+
+Enforces access permissions to ensure documents are only accessed by authorized users.
 
 ## Security
 
 LegalContext prioritizes security at every level:
 
-1. **Data Boundary Control**: All document processing occurs locally
+1. **Data Boundary Control**: All document processing occurs locally within the firm's network
 2. **Secure Transport**: Uses stdio for communication with Claude Desktop
-3. **Access Control**: Respects document management system permissions
+3. **Access Control**: Enforces Clio's document access permissions at every level
 4. **Zero Data Transmission**: No document content sent to external servers
+5. **OAuth 2.0 with PKCE**: Implements secure authorization flow with Clio
+6. **Secure Token Management**: Encrypted storage of access and refresh tokens
+7. **Automatic Token Refresh**: Maintains authentication without user intervention
+8. **Access Logging**: Comprehensive audit logging of document access
 
 See the [Security Architecture](docs/security-architecture.md) document for more details.
 
