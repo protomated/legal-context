@@ -45,5 +45,10 @@ tmp/
 temp/
 
 ## DOCS
-CONTRIBUTING.md
-CODE_OF_CONDUCT.md
+**/*.md
+!README.md
+
+## Misc
+check-pgvector.sh
+demo.sh
+**/*.sh

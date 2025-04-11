@@ -18,6 +18,9 @@ import { DocumentChunk } from '../../database/entities/document-chunk.entity';
  */
 @Injectable()
 export class DocumentResourceService implements OnModuleInit {
+  // Store resource handlers for testing
+  private resourceHandlers = new Map<string, any>();
+
   private readonly logger = new Logger(DocumentResourceService.name);
 
   constructor(
@@ -71,13 +74,24 @@ export class DocumentResourceService implements OnModuleInit {
   }
 
   /**
+   * Handle resource requests by resource name (for testing purposes)
+   */
+  async handleResourceRequest(resourceName: string, uri: any, params: any): Promise<any> {
+    const handler = this.resourceHandlers.get(resourceName);
+    if (!handler) {
+      this.logger.error(`Resource handler '${resourceName}' not found`);
+      return null;
+    }
+    
+    return await handler(uri, params);
+  }
+
+  /**
    * Register a resource for listing available documents
    */
   private registerDocumentListResource(server: any): void {
-    server.resource(
-      'document-list',
-      new ResourceTemplate("documents://list/{filter}/{page}", { list: undefined }),
-      async (uri: any, params: any) => {
+    // Create the handler function
+    const handler = async (uri: any, params: any) => {
         const { filter, page } = params;
         const pageNum = page ? parseInt(page, 10) : 1;
         
@@ -178,6 +192,15 @@ export class DocumentResourceService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.resourceHandlers.set('document-list', handler);
+    
+    // Register with the server
+    server.resource(
+      'document-list',
+      new ResourceTemplate("documents://list/{filter}/{page}", { list: undefined }),
+      handler
     );
     
     this.logger.log('Document list resource registered');
@@ -187,10 +210,8 @@ export class DocumentResourceService implements OnModuleInit {
    * Register a resource for accessing document content
    */
   private registerDocumentContentResource(server: any): void {
-    server.resource(
-      'document',
-      new ResourceTemplate("document://{id}", { list: undefined }),
-      async (uri: any, params: any) => {
+    // Create the handler function
+    const handler = async (uri: any, params: any) => {
         const { id } = params;
         
         this.logger.debug(`Handling document content resource request for ID: ${id}`);
@@ -235,6 +256,15 @@ export class DocumentResourceService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.resourceHandlers.set('document', handler);
+    
+    // Register with the server
+    server.resource(
+      'document',
+      new ResourceTemplate("document://{id}", { list: undefined }),
+      handler
     );
     
     this.logger.log('Document content resource registered');
@@ -244,10 +274,8 @@ export class DocumentResourceService implements OnModuleInit {
    * Register a resource for searching documents
    */
   private registerDocumentSearchResource(server: any): void {
-    server.resource(
-      'document-search',
-      new ResourceTemplate("documents://search/{query}/{page}", { list: undefined }),
-      async (uri: any, params: any) => {
+    // Create the handler function
+    const handler = async (uri: any, params: any) => {
         const { query, page } = params;
         const pageNum = page ? parseInt(page, 10) : 1;
         
@@ -323,6 +351,15 @@ export class DocumentResourceService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.resourceHandlers.set('document-search', handler);
+    
+    // Register with the server
+    server.resource(
+      'document-search',
+      new ResourceTemplate("documents://search/{query}/{page}", { list: undefined }),
+      handler
     );
     
     this.logger.log('Document search resource registered');
@@ -332,10 +369,8 @@ export class DocumentResourceService implements OnModuleInit {
    * Register a resource for listing documents by matter
    */
   private registerMatterDocumentsResource(server: any): void {
-    server.resource(
-      'matter-documents',
-      new ResourceTemplate("matter://{matter_id}/documents/{page}", { list: undefined }),
-      async (uri: any, params: any) => {
+    // Create the handler function
+    const handler = async (uri: any, params: any) => {
         const { matter_id, page } = params;
         const pageNum = page ? parseInt(page, 10) : 1;
         
@@ -430,6 +465,15 @@ export class DocumentResourceService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.resourceHandlers.set('matter-documents', handler);
+    
+    // Register with the server
+    server.resource(
+      'matter-documents',
+      new ResourceTemplate("matter://{matter_id}/documents/{page}", { list: undefined }),
+      handler
     );
     
     this.logger.log('Matter documents resource registered');

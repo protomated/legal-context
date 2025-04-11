@@ -18,6 +18,9 @@ import { ConfigService } from '@nestjs/config';
  */
 @Injectable()
 export class DocumentToolService implements OnModuleInit {
+  // Store tool handlers for testing
+  private toolHandlers = new Map<string, any>();
+
   private readonly logger = new Logger(DocumentToolService.name);
 
   constructor(
@@ -70,18 +73,25 @@ export class DocumentToolService implements OnModuleInit {
   }
 
   /**
+   * Handle tool execution by tool name (for testing purposes)
+   */
+  async handleToolExecution(toolName: string, params: any): Promise<any> {
+    const handler = this.toolHandlers.get(toolName);
+    if (!handler) {
+      this.logger.error(`Tool handler '${toolName}' not found`);
+      return null;
+    }
+    
+    return await handler(params);
+  }
+
+  /**
    * Register a tool for searching documents
    * Uses the Clio API directly for keyword-based searches
    */
   private registerDocumentSearchTool(server: any): void {
-    server.tool(
-      'search-documents',
-      {
-        query: z.string().describe('The search query text'),
-        matter_id: z.string().optional().describe('Optional matter ID to filter by'),
-        limit: z.number().min(1).max(50).optional().default(10).describe('Maximum number of results to return'),
-      },
-      async ({ query, matter_id, limit }) => {
+    // Create the handler function
+    const handler = async ({ query, matter_id, limit }) => {
         this.logger.debug(`Document search tool called with query: ${query}, matter_id: ${matter_id}, limit: ${limit}`);
 
         try {
@@ -143,6 +153,19 @@ export class DocumentToolService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.toolHandlers.set('search-documents', handler);
+    
+    // Register with the server
+    server.tool(
+      'search-documents',
+      {
+        query: z.string().describe('The search query text'),
+        matter_id: z.string().optional().describe('Optional matter ID to filter by'),
+        limit: z.number().min(1).max(50).optional().default(10).describe('Maximum number of results to return'),
+      },
+      handler
     );
 
     this.logger.log('Document search tool registered');
@@ -153,13 +176,8 @@ export class DocumentToolService implements OnModuleInit {
    * This enables documents to be processed on-demand for improved performance
    */
   private registerDocumentProcessingTool(server: any): void {
-    server.tool(
-      'process-document',
-      {
-        document_id: z.string().describe('The Clio document ID to process'),
-        force_refresh: z.boolean().optional().default(false).describe('Whether to force reprocessing even if already processed'),
-      },
-      async ({ document_id, force_refresh }) => {
+    // Create the handler function
+    const handler = async ({ document_id, force_refresh }) => {
         this.logger.debug(`Document processing tool called for ID: ${document_id}`);
 
         try {
@@ -200,6 +218,18 @@ export class DocumentToolService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.toolHandlers.set('process-document', handler);
+    
+    // Register with the server
+    server.tool(
+      'process-document',
+      {
+        document_id: z.string().describe('The Clio document ID to process'),
+        force_refresh: z.boolean().optional().default(false).describe('Whether to force reprocessing even if already processed'),
+      },
+      handler
     );
 
     this.logger.log('Document processing tool registered');
@@ -210,14 +240,8 @@ export class DocumentToolService implements OnModuleInit {
    * Supports multiple citation formats for legal documents
    */
   private registerCitationTool(server: any): void {
-    server.tool(
-      'generate-citation',
-      {
-        document_id: z.string().describe('The Clio document ID to cite'),
-        format: z.enum(['standard', 'bluebook', 'apa']).optional().default('standard').describe('Citation format to use'),
-        section: z.string().optional().describe('Optional section or page to cite specifically'),
-      },
-      async ({ document_id, format, section }) => {
+    // Create the handler function
+    const handler = async ({ document_id, format, section }) => {
         this.logger.debug(`Citation generation tool called for document ID: ${document_id}`);
 
         try {
@@ -263,6 +287,19 @@ export class DocumentToolService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.toolHandlers.set('generate-citation', handler);
+    
+    // Register with the server
+    server.tool(
+      'generate-citation',
+      {
+        document_id: z.string().describe('The Clio document ID to cite'),
+        format: z.enum(['standard', 'bluebook', 'apa']).optional().default('standard').describe('Citation format to use'),
+        section: z.string().optional().describe('Optional section or page to cite specifically'),
+      },
+      handler
     );
 
     this.logger.log('Citation generation tool registered');
@@ -273,15 +310,8 @@ export class DocumentToolService implements OnModuleInit {
    * Uses pgvector-based similarity search on document chunks
    */
   private registerSemanticSearchTool(server: any): void {
-    server.tool(
-      'semantic-search',
-      {
-        query: z.string().describe('The search query text'),
-        matter_id: z.string().optional().describe('Optional matter ID to filter by'),
-        search_type: z.enum(['semantic', 'hybrid', 'text']).optional().default('hybrid').describe('Search type to use'),
-        limit: z.number().min(1).max(20).optional().default(5).describe('Maximum number of results to return'),
-      },
-      async ({ query, matter_id, search_type, limit }) => {
+    // Create the handler function
+    const handler = async ({ query, matter_id, search_type, limit }) => {
         this.logger.debug(`Semantic search tool called with query: ${query}, type: ${search_type}`);
 
         try {
@@ -353,6 +383,20 @@ export class DocumentToolService implements OnModuleInit {
           };
         }
       }
+    
+    // Store the handler for testing
+    this.toolHandlers.set('semantic-search', handler);
+    
+    // Register with the server
+    server.tool(
+      'semantic-search',
+      {
+        query: z.string().describe('The search query text'),
+        matter_id: z.string().optional().describe('Optional matter ID to filter by'),
+        search_type: z.enum(['semantic', 'hybrid', 'text']).optional().default('hybrid').describe('Search type to use'),
+        limit: z.number().min(1).max(20).optional().default(5).describe('Maximum number of results to return'),
+      },
+      handler
     );
 
     this.logger.log('Semantic search tool registered');

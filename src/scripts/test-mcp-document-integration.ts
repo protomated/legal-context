@@ -11,6 +11,8 @@ import { Logger } from '@nestjs/common';
 import * as readline from 'readline';
 import { AppModule } from '../app.module';
 import { McpServerService } from '../mcp/mcp-server.service';
+import { McpResourcesService } from '../mcp/mcp-resources.service';
+import { McpToolsService } from '../mcp/mcp-tools.service';
 import { ClioDocumentService } from '../clio/api/clio-document.service';
 import { DocumentResourceService } from '../mcp/resources/document-resource.service';
 import { DocumentToolService } from '../mcp/tools/document-tool.service';
@@ -22,6 +24,7 @@ const logger = new Logger('TestMcpDocumentIntegration');
  * Main function to test the document integration with MCP
  */
 async function testMcpDocumentIntegration() {
+  process.env.NODE_ENV = 'development'; // Ensure we're in development mode
   logger.log('Starting MCP document integration test');
 
   // Create NestJS application
@@ -32,6 +35,8 @@ async function testMcpDocumentIntegration() {
   try {
     // Get required services
     const mcpServerService = app.get(McpServerService);
+    const mcpResourcesService = app.get(McpResourcesService);
+    const mcpToolsService = app.get(McpToolsService);
     const clioDocumentService = app.get(ClioDocumentService);
     const documentResourceService = app.get(DocumentResourceService);
     const documentToolService = app.get(DocumentToolService);
@@ -57,32 +62,45 @@ async function testMcpDocumentIntegration() {
       'Enter choice (1-8): ',
       async (choice) => {
         try {
+          // Initialize server and register resources/tools
           const server = mcpServerService.getServer();
+          
+          // Register resources manually
+          await mcpResourcesService.registerResources();
+          
+          // Register tools manually
+          await mcpToolsService.registerTools();
+          
+          // Register document resources
+          await documentResourceService.registerResources();
+          
+          // Register document tools
+          await documentToolService.registerTools();
           
           switch (choice) {
             case '1':
-              await testDocumentListResource(server, rl);
+              await testDocumentListResource(documentResourceService, rl);
               break;
             case '2':
-              await testDocumentContentResource(server, clioDocumentService, rl);
+              await testDocumentContentResource(documentResourceService, clioDocumentService, rl);
               break;
             case '3':
-              await testDocumentSearchResource(server, rl);
+              await testDocumentSearchResource(documentResourceService, rl);
               break;
             case '4':
-              await testMatterDocumentsResource(server, rl);
+              await testMatterDocumentsResource(documentResourceService, rl);
               break;
             case '5':
-              await testDocumentSearchTool(server, rl);
+              await testDocumentSearchTool(documentToolService, rl);
               break;
             case '6':
-              await testDocumentProcessingTool(server, documentProcessorService, rl);
+              await testDocumentProcessingTool(documentToolService, documentProcessorService, rl);
               break;
             case '7':
-              await testCitationGenerationTool(server, rl);
+              await testCitationGenerationTool(documentToolService, rl);
               break;
             case '8':
-              await testSemanticSearchTool(server, rl);
+              await testSemanticSearchTool(documentToolService, rl);
               break;
             default:
               logger.log('Invalid choice. Exiting.');
@@ -105,7 +123,7 @@ async function testMcpDocumentIntegration() {
 /**
  * Test the document list resource
  */
-async function testDocumentListResource(server: any, rl: readline.Interface) {
+async function testDocumentListResource(documentResourceService: DocumentResourceService, rl: readline.Interface) {
   rl.question('Enter filter (or "all"): ', async (filter) => {
     try {
       logger.log(`Testing document list resource with filter: ${filter}`);
@@ -114,26 +132,29 @@ async function testDocumentListResource(server: any, rl: readline.Interface) {
       const uri = { href: `documents://list/${filter}/1` };
       const params = { filter, page: '1' };
       
-      // Find the resource handler
-      const resources = server._resources?.get('document-list');
-      if (!resources || !resources.handler) {
-        throw new Error('Document list resource not registered');
+      try {
+        // We'll use the document resource service directly
+        const result = await documentResourceService.handleResourceRequest('document-list', uri, params);
+        
+        if (!result) {
+          throw new Error('Document list resource not registered or returned no result');
+        }
+        
+        // Display result
+        logger.log('Resource result:');
+        logger.log(JSON.stringify(result, null, 2));
+        
+        // Display content if available
+        if (result.contents && result.contents.length > 0) {
+          logger.log('\nContent:');
+          logger.log(result.contents[0].text);
+        }
+        
+        process.exit(0);
+      } catch (error) {
+        logger.error(`Error testing document list resource: ${error.message}`, error.stack);
+        process.exit(1);
       }
-      
-      // Call the handler
-      const result = await resources.handler(uri, params);
-      
-      // Display result
-      logger.log('Resource result:');
-      logger.log(JSON.stringify(result, null, 2));
-      
-      // Display content if available
-      if (result.contents && result.contents.length > 0) {
-        logger.log('\nContent:');
-        logger.log(result.contents[0].text);
-      }
-      
-      process.exit(0);
     } catch (error) {
       logger.error(`Error testing document list resource: ${error.message}`, error.stack);
       process.exit(1);
@@ -144,7 +165,7 @@ async function testDocumentListResource(server: any, rl: readline.Interface) {
 /**
  * Test the document content resource
  */
-async function testDocumentContentResource(server: any, clioDocumentService: ClioDocumentService, rl: readline.Interface) {
+async function testDocumentContentResource(documentResourceService: DocumentResourceService, clioDocumentService: ClioDocumentService, rl: readline.Interface) {
   // First, get a list of documents to choose from
   try {
     const documents = await clioDocumentService.listDocuments({
@@ -188,14 +209,12 @@ async function testDocumentContentResource(server: any, clioDocumentService: Cli
         const uri = { href: `document://${documentId}` };
         const params = { id: documentId };
         
-        // Find the resource handler
-        const resources = server._resources?.get('document');
-        if (!resources || !resources.handler) {
-          throw new Error('Document content resource not registered');
-        }
+        // Use the document resource service directly
+        const result = await documentResourceService.handleResourceRequest('document', uri, params);
         
-        // Call the handler
-        const result = await resources.handler(uri, params);
+        if (!result) {
+          throw new Error('Document content resource not registered or returned no result');
+        }
         
         // Display result
         logger.log('Resource result:');
@@ -223,7 +242,7 @@ async function testDocumentContentResource(server: any, clioDocumentService: Cli
 /**
  * Test the document search resource
  */
-async function testDocumentSearchResource(server: any, rl: readline.Interface) {
+async function testDocumentSearchResource(documentResourceService: DocumentResourceService, rl: readline.Interface) {
   rl.question('Enter search query: ', async (query) => {
     try {
       logger.log(`Testing document search resource with query: ${query}`);
@@ -235,14 +254,12 @@ async function testDocumentSearchResource(server: any, rl: readline.Interface) {
       const uri = { href: `documents://search/${encodedQuery}/1` };
       const params = { query: encodedQuery, page: '1' };
       
-      // Find the resource handler
-      const resources = server._resources?.get('document-search');
-      if (!resources || !resources.handler) {
-        throw new Error('Document search resource not registered');
-      }
+      // Use the document resource service directly
+      const result = await documentResourceService.handleResourceRequest('document-search', uri, params);
       
-      // Call the handler
-      const result = await resources.handler(uri, params);
+      if (!result) {
+        throw new Error('Document search resource not registered or returned no result');
+      }
       
       // Display result
       logger.log('Resource result:');
@@ -265,7 +282,7 @@ async function testDocumentSearchResource(server: any, rl: readline.Interface) {
 /**
  * Test the matter documents resource
  */
-async function testMatterDocumentsResource(server: any, rl: readline.Interface) {
+async function testMatterDocumentsResource(documentResourceService: DocumentResourceService, rl: readline.Interface) {
   rl.question('Enter matter ID: ', async (matterId) => {
     try {
       logger.log(`Testing matter documents resource with matter ID: ${matterId}`);
@@ -274,14 +291,12 @@ async function testMatterDocumentsResource(server: any, rl: readline.Interface) 
       const uri = { href: `matter://${matterId}/documents/1` };
       const params = { matter_id: matterId, page: '1' };
       
-      // Find the resource handler
-      const resources = server._resources?.get('matter-documents');
-      if (!resources || !resources.handler) {
-        throw new Error('Matter documents resource not registered');
-      }
+      // Use the document resource service directly
+      const result = await documentResourceService.handleResourceRequest('matter-documents', uri, params);
       
-      // Call the handler
-      const result = await resources.handler(uri, params);
+      if (!result) {
+        throw new Error('Matter documents resource not registered or returned no result');
+      }
       
       // Display result
       logger.log('Resource result:');
@@ -304,7 +319,7 @@ async function testMatterDocumentsResource(server: any, rl: readline.Interface) 
 /**
  * Test the document search tool
  */
-async function testDocumentSearchTool(server: any, rl: readline.Interface) {
+async function testDocumentSearchTool(documentToolService: DocumentToolService, rl: readline.Interface) {
   rl.question('Enter search query: ', (query) => {
     rl.question('Enter matter ID (optional): ', async (matterId) => {
       try {
@@ -316,14 +331,12 @@ async function testDocumentSearchTool(server: any, rl: readline.Interface) {
           params.matter_id = matterId;
         }
         
-        // Find the tool handler
-        const tools = server._tools?.get('search-documents');
-        if (!tools || !tools.handler) {
-          throw new Error('Document search tool not registered');
-        }
+        // Use the document tool service directly
+        const result = await documentToolService.handleToolExecution('search-documents', params);
         
-        // Call the handler
-        const result = await tools.handler(params);
+        if (!result) {
+          throw new Error('Document search tool not registered or returned no result');
+        }
         
         // Display result
         logger.log('Tool result:');
@@ -341,7 +354,7 @@ async function testDocumentSearchTool(server: any, rl: readline.Interface) {
 /**
  * Test the document processing tool
  */
-async function testDocumentProcessingTool(server: any, documentProcessorService: DocumentProcessorService, rl: readline.Interface) {
+async function testDocumentProcessingTool(documentToolService: DocumentToolService, documentProcessorService: DocumentProcessorService, rl: readline.Interface) {
   // Get a random document to process
   try {
     const documents = await documentProcessorService.searchDocuments('');
@@ -381,14 +394,12 @@ async function testDocumentProcessingTool(server: any, documentProcessorService:
         // Prepare tool parameters
         const params = { document_id: documentId, force_refresh: true };
         
-        // Find the tool handler
-        const tools = server._tools?.get('process-document');
-        if (!tools || !tools.handler) {
-          throw new Error('Document processing tool not registered');
-        }
+        // Use the document tool service directly
+        const result = await documentToolService.handleToolExecution('process-document', params);
         
-        // Call the handler
-        const result = await tools.handler(params);
+        if (!result) {
+          throw new Error('Document processing tool not registered or returned no result');
+        }
         
         // Display result
         logger.log('Tool result:');
@@ -409,7 +420,7 @@ async function testDocumentProcessingTool(server: any, documentProcessorService:
 /**
  * Test the citation generation tool
  */
-async function testCitationGenerationTool(server: any, rl: readline.Interface) {
+async function testCitationGenerationTool(documentToolService: DocumentToolService, rl: readline.Interface) {
   rl.question('Enter document ID: ', (documentId) => {
     rl.question('Enter citation format (standard, bluebook, apa): ', (format) => {
       rl.question('Enter section (optional): ', async (section) => {
@@ -425,14 +436,12 @@ async function testCitationGenerationTool(server: any, rl: readline.Interface) {
             params.section = section;
           }
           
-          // Find the tool handler
-          const tools = server._tools?.get('generate-citation');
-          if (!tools || !tools.handler) {
-            throw new Error('Citation generation tool not registered');
-          }
+          // Use the document tool service directly
+          const result = await documentToolService.handleToolExecution('generate-citation', params);
           
-          // Call the handler
-          const result = await tools.handler(params);
+          if (!result) {
+            throw new Error('Citation generation tool not registered or returned no result');
+          }
           
           // Display result
           logger.log('Tool result:');
@@ -451,7 +460,7 @@ async function testCitationGenerationTool(server: any, rl: readline.Interface) {
 /**
  * Test the semantic search tool
  */
-async function testSemanticSearchTool(server: any, rl: readline.Interface) {
+async function testSemanticSearchTool(documentToolService: DocumentToolService, rl: readline.Interface) {
   rl.question('Enter search query: ', (query) => {
     rl.question('Enter search type (semantic, hybrid, text): ', (searchType) => {
       rl.question('Enter limit (default 5): ', async (limitStr) => {
@@ -466,14 +475,12 @@ async function testSemanticSearchTool(server: any, rl: readline.Interface) {
             params.search_type = searchType;
           }
           
-          // Find the tool handler
-          const tools = server._tools?.get('semantic-search');
-          if (!tools || !tools.handler) {
-            throw new Error('Semantic search tool not registered');
-          }
+          // Use the document tool service directly
+          const result = await documentToolService.handleToolExecution('semantic-search', params);
           
-          // Call the handler
-          const result = await tools.handler(params);
+          if (!result) {
+            throw new Error('Semantic search tool not registered or returned no result');
+          }
           
           // Display result
           logger.log('Tool result:');
