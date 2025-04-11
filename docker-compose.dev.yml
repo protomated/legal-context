@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Development services
+  legalcontext-dev:
+    container_name: legalcontext-dev
+    build:
+      context: .
+      target: development
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_HOST=postgres-dev
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - DATABASE_NAME=legalcontext_dev
+      # These would typically be in a .env file or passed at runtime
+      - CLIO_CLIENT_ID=${CLIO_CLIENT_ID}
+      - CLIO_CLIENT_SECRET=${CLIO_CLIENT_SECRET}
+      - CLIO_REDIRECT_URI=${CLIO_REDIRECT_URI}
+      - CLIO_API_URL=${CLIO_API_URL}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      - postgres-dev
+    command: bun run start:dev
+
+  postgres-dev:
+    container_name: postgres-dev
+    image: ankane/pgvector:v0.5.1
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=legalcontext_dev
+    ports:
+      - "5488:5432"
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+      # Add custom initialization scripts if needed
+      - ./docker/postgres/init-vector.sql:/docker-entrypoint-initdb.d/init-vector.sql:ro
+
+volumes:
+  node_modules:
+  postgres-dev-data:

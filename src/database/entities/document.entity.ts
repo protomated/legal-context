@@ -1,5 +1,4 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
-import { DocumentChunk } from './document-chunk.entity';
 
 @Entity()
 export class Document {
@@ -18,8 +17,8 @@ export class Document {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
-  @OneToMany(() => DocumentChunk, chunk => chunk.document)
-  chunks: DocumentChunk[];
+  @OneToMany('DocumentChunk', 'document')
+  chunks: any[]; // Using 'any[]' to avoid circular reference issue
 
   @CreateDateColumn()
   createdAt: Date;

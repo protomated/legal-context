@@ -20,6 +20,20 @@ export const configValidationSchema = Joi.object({
   // Security configuration
   ENCRYPTION_KEY: Joi.string().required(),
 
+  // Clio API configuration
+  CLIO_CLIENT_ID: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.required(),
+    otherwise: Joi.optional()
+  }),
+  CLIO_CLIENT_SECRET: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.required(),
+    otherwise: Joi.optional()
+  }),
+  CLIO_REDIRECT_URI: Joi.string().default('http://127.0.0.1:3000/clio/auth/callback'),
+  CLIO_API_URL: Joi.string().default('https://app.clio.com/api/v4'),
+
   // Document processing configuration
   MAX_DOCUMENT_SIZE: Joi.number().default(5 * 1024 * 1024), // 5MB
   CHUNK_SIZE: Joi.number().default(1000),

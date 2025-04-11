@@ -2,7 +2,7 @@ bun.lock
 # compiled output
 /dist
 /node_modules
-
+/docs
 # Logs
 logs
 *.log
@@ -43,3 +43,12 @@ lerna-debug.log*
 # Temporary files
 tmp/
 temp/
+
+## DOCS
+**/*.md
+!README.md
+
+## Misc
+check-pgvector.sh
+demo.sh
+**/*.sh

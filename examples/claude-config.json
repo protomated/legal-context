@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "bun",
+      "args": [
+        "run",
+        "/Users/deletosh/projects/legal-context/src/claude-mcp-server.ts"
+      ],
+      "cwd": "/Users/deletosh/projects/legal-context"
+    }
+  }
+}

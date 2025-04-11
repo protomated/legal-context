@@ -1,14 +1,13 @@
 import { Entity, Column, PrimaryGeneratedColumn, OneToOne, JoinColumn } from 'typeorm';
-import { DocumentChunk } from './document-chunk.entity';
 
 @Entity()
 export class DocumentVector {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => DocumentChunk, chunk => chunk.vector)
+  @OneToOne('DocumentChunk', 'vector')
   @JoinColumn()
-  chunk: DocumentChunk;
+  chunk: any; // Using 'any' to avoid circular reference issue
 
   @Column('simple-array')
   embedding: number[];
