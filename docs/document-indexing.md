@@ -71,6 +71,37 @@ curl -X GET http://localhost:3000/api/documents/search \
   -d '{"query": "non-compete agreements in healthcare", "limit": 5}'
 ```
 
+### RAG-Based Queries (Retrieval-Augmented Generation)
+
+LegalContext now supports RAG-based queries, which combine semantic search with prompt augmentation to provide more accurate and grounded responses.
+
+#### How RAG Works in LegalContext
+
+1. **Retrieval**: When you ask a question, the system retrieves relevant document chunks from the vector database using semantic search.
+2. **Augmentation**: These chunks are formatted into a context string and combined with your query in a prompt template.
+3. **Generation**: Claude uses this augmented prompt to generate a response that's grounded in your firm's documents.
+
+#### Using RAG Queries with Claude Desktop
+
+You can use RAG by asking Claude questions about your documents:
+
+```
+What are the key provisions in our settlement agreement with Acme Corp?
+```
+
+Claude will use the `rag_query` tool to:
+1. Retrieve relevant document chunks
+2. Format them into a context string
+3. Create an augmented prompt
+4. Generate a response based on the retrieved information
+
+#### Benefits of RAG
+
+- **Grounded Responses**: Answers are based directly on your firm's documents
+- **Reduced Hallucinations**: Claude is less likely to make up information
+- **Source Citations**: Responses can include references to source documents
+- **Contextual Understanding**: Claude can understand the specific context of your legal documents
+
 ## Testing the Feature
 
 To test the document indexing and semantic search functionality:

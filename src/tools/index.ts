@@ -6,7 +6,7 @@
 
 /**
  * Tools Module
- * 
+ *
  * This module exports all MCP tools for the LegalContext server.
  */
 
@@ -15,6 +15,7 @@ import { registerLegalQueryTool } from "./legalQuery";
 import { registerDocumentAnalysisTools } from "./documentAnalysisTool";
 import { registerLegalResearchTools } from "./legalResearchTool";
 import { registerDocumentSearchTools } from "./documentSearchTool";
+import { registerRagQueryTool } from "./ragQueryTool";
 import { logger } from "../logger";
 
 /**
@@ -22,12 +23,13 @@ import { logger } from "../logger";
  */
 export function registerTools(server: McpServer): void {
   logger.info("Registering all MCP tools...");
-  
+
   // Register each category of tools
   registerLegalQueryTool(server);
   registerDocumentAnalysisTools(server);
   registerLegalResearchTools(server);
   registerDocumentSearchTools(server);
-  
+  registerRagQueryTool(server);
+
   logger.info("All MCP tools registered successfully");
 }
