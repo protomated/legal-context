@@ -38,6 +38,7 @@ export interface BatchIndexingResult {
 /**
  * Main function to perform batch indexing of Clio documents
  * Retrieves documents from Clio, processes them, and indexes them in LanceDB
+ * Enforces the document volume limit (MAX_DOCUMENTS)
  */
 export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
   const startTime = new Date();
@@ -73,9 +74,25 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
       await documentIndexer.initialize();
     }
 
-    // Retrieve documents from Clio (first page with MAX_DOCUMENTS per page)
-    logger.info(`Retrieving up to ${MAX_DOCUMENTS} documents from Clio`);
-    const documentsResponse = await clioApiClient.listDocuments(1, MAX_DOCUMENTS);
+    // Get current document count from the index
+    const indexStats = await documentIndexer.getIndexStats();
+    const currentDocumentCount = indexStats.documentCount;
+    logger.info(`Current document count in index: ${currentDocumentCount}/${MAX_DOCUMENTS}`);
+
+    // Check if we've already reached the document limit
+    if (currentDocumentCount >= MAX_DOCUMENTS) {
+      logger.warn(`Document limit (${MAX_DOCUMENTS}) already reached. No new documents will be indexed.`);
+      result.totalDocuments = 0;
+      return result;
+    }
+
+    // Calculate how many more documents we can index
+    const remainingCapacity = MAX_DOCUMENTS - currentDocumentCount;
+    logger.info(`Remaining document capacity: ${remainingCapacity}`);
+
+    // Retrieve documents from Clio (first page with remaining capacity)
+    logger.info(`Retrieving up to ${remainingCapacity} documents from Clio`);
+    const documentsResponse = await clioApiClient.listDocuments(1, remainingCapacity);
     const documents = documentsResponse.data;
 
     result.totalDocuments = documents.length;
@@ -84,6 +101,13 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     // Process each document
     for (const document of documents) {
       try {
+        // Check if we've reached the document limit before processing each document
+        const currentStats = await documentIndexer.getIndexStats();
+        if (currentStats.documentCount >= MAX_DOCUMENTS) {
+          logger.warn(`Document limit (${MAX_DOCUMENTS}) reached. Stopping indexing process.`);
+          break;
+        }
+
         logger.info(`Processing document ${result.processedDocuments + 1}/${documents.length}: ${document.id} - ${document.name}`);
 
         // Process the document (download, extract text)
@@ -115,6 +139,13 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     const indexStats = await documentIndexer.getIndexStats();
     logger.info(`Document index now contains ${indexStats.documentCount} documents with ${indexStats.chunkCount} chunks`);
 
+    // Check if we've reached the document limit
+    if (indexStats.documentCount >= MAX_DOCUMENTS) {
+      logger.warn(`Document limit (${MAX_DOCUMENTS}) has been reached. No more documents will be indexed until some are removed.`);
+    } else {
+      logger.info(`Document capacity remaining: ${MAX_DOCUMENTS - indexStats.documentCount} of ${MAX_DOCUMENTS}`);
+    }
+
   } catch (error) {
     const errorMessage = `Batch indexing process failed: ${error instanceof Error ? error.message : String(error)}`;
     logger.error(errorMessage);
@@ -143,6 +174,11 @@ export async function runBatchIndexing(): Promise<string> {
   try {
     const result = await batchIndexDocuments();
 
+    // Get current document count from the index
+    const documentIndexer = getDocumentIndexer();
+    const indexStats = await documentIndexer.getIndexStats();
+    const currentDocumentCount = indexStats.documentCount;
+
     // Format a summary for display/logging
     const summary = [
       `Batch Document Indexing Summary:`,
@@ -155,6 +191,11 @@ export async function runBatchIndexing(): Promise<string> {
       `  Total retrieved: ${result.totalDocuments}`,
       `  Successfully processed: ${result.successfulDocuments}`,
       `  Failed: ${result.failedDocuments}`,
+      ``,
+      `Document Limit Status:`,
+      `  Current document count: ${currentDocumentCount}/${MAX_DOCUMENTS}`,
+      `  Remaining capacity: ${Math.max(0, MAX_DOCUMENTS - currentDocumentCount)}`,
+      `  Limit reached: ${currentDocumentCount >= MAX_DOCUMENTS ? 'Yes' : 'No'}`,
       ``
     ];
 
