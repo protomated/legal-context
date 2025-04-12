@@ -15,6 +15,7 @@
     "auth:simple": "bun run src/tools/simple-auth.ts",
     "test:auth": "bun run src/tests/test-auth.ts",
     "test:clio": "bun run src/tests/test-clio.ts",
+    "test:extraction": "bun run src/tests/testTextExtraction.ts",
     "digest": "bunx ai-digest"
   },
   "devDependencies": {

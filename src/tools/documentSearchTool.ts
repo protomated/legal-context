@@ -8,7 +8,8 @@
  * Document Search Tool
  *
  * This module implements MCP tools for searching legal documents.
- * It provides functionality for finding documents by various criteria.
+ * It provides functionality for finding documents by various criteria,
+ * including semantic search using document embeddings.
  */
 
 import { z } from "zod";
@@ -16,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../logger";
 import { getClioApiClient, ClioDocument } from "../clio";
 import { processDocument } from "../documents/documentProcessor";
+import { getDocumentIndexer } from "../documents/documentIndexer";
 
 /**
  * Register document search tools with the MCP server
@@ -255,6 +257,159 @@ export function registerDocumentSearchTools(server: McpServer): void {
         logger.error("Error retrieving document content:", error);
         return {
           content: [{ type: "text", text: "An error occurred while retrieving document content." }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Semantic Document Search Tool
+  server.tool(
+    "semantic_document_search",
+    "Performs semantic search across indexed documents to find content similar to the query, regardless of exact keyword matches.",
+    {
+      query: z.string().describe("The search query to find semantically similar document content."),
+      limit: z.number().min(1).max(20).optional().describe("Maximum number of results to return (default: 5).")
+    },
+    async ({ query, limit = 5 }) => {
+      logger.info(`Performing semantic search: "${query}" with limit ${limit}`);
+
+      try {
+        // Get the document indexer
+        const documentIndexer = getDocumentIndexer();
+
+        // Initialize the indexer if needed
+        if (!documentIndexer.isInitialized()) {
+          await documentIndexer.initialize();
+        }
+
+        // Get index statistics
+        const indexStats = await documentIndexer.getIndexStats();
+
+        // Check if there are any documents in the index
+        if (indexStats.documentCount === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: "No documents have been indexed yet. Please index some documents before performing semantic search."
+            }]
+          };
+        }
+
+        // Perform the semantic search
+        const searchResults = await documentIndexer.searchDocuments(query, limit);
+
+        // Check if any results were found
+        if (searchResults.length === 0) {
+          return {
+            content: [{
+              type: "text",
+              text: `No documents found that semantically match the query: "${query}". Try a different query or index more documents.`
+            }]
+          };
+        }
+
+        // Format the search results
+        let response = `Semantic Search Results for "${query}":\n\n`;
+
+        searchResults.forEach((result, index) => {
+          response += `${index + 1}. ${result.documentName}\n`;
+          response += `   Document ID: ${result.documentId}\n`;
+          response += `   Relevance Score: ${(1 - result.score).toFixed(4)}\n`;
+
+          if (result.metadata.contentType) {
+            response += `   Type: ${result.metadata.contentType}\n`;
+          }
+
+          if (result.metadata.category) {
+            response += `   Category: ${result.metadata.category}\n`;
+          }
+
+          if (result.metadata.parentFolder && result.metadata.parentFolder.name) {
+            response += `   Folder: ${result.metadata.parentFolder.name}\n`;
+          }
+
+          response += `   Created: ${new Date(result.metadata.created).toLocaleDateString()}\n`;
+          response += `   Updated: ${new Date(result.metadata.updated).toLocaleDateString()}\n`;
+
+          // Add a snippet of the matching text
+          response += `   Snippet: "${result.text.length > 200 
+            ? result.text.substring(0, 200) + '...' 
+            : result.text}"\n`;
+
+          response += `   URL: legal://documents/${result.documentId}\n\n`;
+        });
+
+        // Add index statistics
+        response += `\nSearch performed across ${indexStats.documentCount} documents with ${indexStats.chunkCount} indexed chunks.`;
+
+        return {
+          content: [{ type: "text", text: response }]
+        };
+      } catch (error) {
+        logger.error("Error performing semantic search:", error);
+        return {
+          content: [{
+            type: "text",
+            text: "An error occurred while performing semantic search. Please check the server logs for details."
+          }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // Document Indexing Tool
+  server.tool(
+    "index_document",
+    "Indexes a document for semantic search by processing its content and storing embeddings.",
+    {
+      documentId: z.string().describe("The ID of the document to index.")
+    },
+    async ({ documentId }) => {
+      logger.info(`Indexing document for semantic search: ${documentId}`);
+
+      try {
+        // Process the document to get its content
+        const processedDocument = await processDocument(documentId);
+
+        // Get the document indexer
+        const documentIndexer = getDocumentIndexer();
+
+        // Initialize the indexer if needed
+        if (!documentIndexer.isInitialized()) {
+          await documentIndexer.initialize();
+        }
+
+        // Index the document
+        const success = await documentIndexer.indexDocument(processedDocument);
+
+        if (success) {
+          // Get updated index statistics
+          const indexStats = await documentIndexer.getIndexStats();
+
+          return {
+            content: [{
+              type: "text",
+              text: `Successfully indexed document "${processedDocument.name}" (ID: ${documentId}) for semantic search.\n\nCurrent index contains ${indexStats.documentCount} documents with ${indexStats.chunkCount} indexed chunks.`
+            }]
+          };
+        } else {
+          return {
+            content: [{
+              type: "text",
+              text: `Failed to index document ${documentId}. The document may be empty or in an unsupported format.`
+            }],
+            isError: true,
+          };
+        }
+      } catch (error) {
+        logger.error(`Error indexing document ${documentId}:`, error);
+        return {
+          content: [{
+            type: "text",
+            text: "An error occurred while indexing the document. Please check the server logs for details."
+          }],
           isError: true,
         };
       }

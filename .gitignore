@@ -44,3 +44,9 @@ lerna-debug.log*
 tmp/
 temp/
 codebase.md
+
+# Test files
+test-files/*
+!test-files/README.md
+
+
