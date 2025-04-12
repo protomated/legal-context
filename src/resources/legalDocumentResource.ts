@@ -6,7 +6,7 @@
 
 /**
  * Legal Document Resource
- * 
+ *
  * This module implements MCP resources for accessing legal documents.
  * It provides access to documents stored in the Clio system.
  */
@@ -19,7 +19,7 @@ import { logger } from "../logger";
  */
 export function registerLegalDocumentResources(server: McpServer): void {
   logger.info("Registering legal document resources...");
-  
+
   // Sample document types for placeholder implementation
   const documentTypes = [
     "settlement-agreements",
@@ -31,14 +31,15 @@ export function registerLegalDocumentResources(server: McpServer): void {
     "case-documents",
     "client-documentation"
   ];
-  
+
   // Register a document collection resource that lists available document types
   server.resource(
-    "document-types",
+    "document_types - Browse available legal document categories",
     "legal://document-types",
+    "Browse available legal document categories in the firm's document management system",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -47,21 +48,21 @@ export function registerLegalDocumentResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a dynamic resource for document types
   server.resource(
-    "document-type",
+    "document_type - Access documents from a specific category",
     new ResourceTemplate("legal://documents/{type}", { list: async () => {
       return documentTypes.map(type => ({ href: `legal://documents/${type}` }));
     }}),
     async (uri, { type }) => {
       logger.info(`Resource requested: ${uri.href} (type: ${type})`);
-      
+
       // This is a placeholder implementation
       // In the future, this will query the actual documents from Clio
-      
+
       let description = "Placeholder document collection";
-      
+
       // Customize description based on document type
       switch (type) {
         case "settlement-agreements":
@@ -91,7 +92,7 @@ export function registerLegalDocumentResources(server: McpServer): void {
         default:
           description = `Collection of ${type.replace(/-/g, " ")} documents.`;
       }
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -100,14 +101,14 @@ export function registerLegalDocumentResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a specific document resource for the Acme Corp settlement
   server.resource(
-    "acme-settlement",
+    "acme_settlement - Settlement agreement with Acme Corporation",
     "legal://documents/settlement-agreements/acme-corp",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -128,14 +129,14 @@ export function registerLegalDocumentResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a specific document resource for employment contract template
   server.resource(
-    "employment-template",
+    "employment_template - Standard employment contract template",
     "legal://documents/employment-contracts/template",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -157,14 +158,14 @@ export function registerLegalDocumentResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a specific document resource for the Johnson contract
   server.resource(
-    "johnson-contract",
+    "johnson_contract - Service agreement with Johnson Corp",
     "legal://documents/client-contracts/johnson",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -186,6 +187,6 @@ export function registerLegalDocumentResources(server: McpServer): void {
       };
     }
   );
-  
+
   logger.info("Legal document resources registered successfully");
 }

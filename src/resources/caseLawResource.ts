@@ -6,7 +6,7 @@
 
 /**
  * Case Law Resource
- * 
+ *
  * This module implements MCP resources for accessing case law and precedents.
  * It provides access to legal precedents and case history.
  */
@@ -19,7 +19,7 @@ import { logger } from "../logger";
  */
 export function registerCaseLawResources(server: McpServer): void {
   logger.info("Registering case law resources...");
-  
+
   // Sample case law categories for placeholder implementation
   const caseLawCategories = [
     "data-privacy",
@@ -28,14 +28,14 @@ export function registerCaseLawResources(server: McpServer): void {
     "contracts",
     "corporate"
   ];
-  
+
   // Register a case law categories resource that lists available categories
   server.resource(
-    "case-law-categories",
+    "case_law_categories - Browse available legal precedent categories",
     "legal://case-law",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -44,21 +44,21 @@ export function registerCaseLawResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a dynamic resource for case law categories
   server.resource(
-    "case-law-category",
+    "case_law_category - Access legal precedents from a specific category",
     new ResourceTemplate("legal://case-law/{category}", { list: async () => {
       return caseLawCategories.map(category => ({ href: `legal://case-law/${category}` }));
     }}),
     async (uri, { category }) => {
       logger.info(`Resource requested: ${uri.href} (category: ${category})`);
-      
+
       // This is a placeholder implementation
       // In the future, this will query the actual case law from Clio or other sources
-      
+
       let description = "Placeholder case law collection";
-      
+
       // Customize description based on case law category
       switch (category) {
         case "data-privacy":
@@ -129,7 +129,7 @@ export function registerCaseLawResources(server: McpServer): void {
         default:
           description = `Collection of ${category.replace(/-/g, " ")} legal precedents.`;
       }
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -138,14 +138,14 @@ export function registerCaseLawResources(server: McpServer): void {
       };
     }
   );
-  
+
   // Register a specific resource for the Smith litigation
   server.resource(
-    "smith-litigation",
+    "smith_litigation - Smith v. Regional Distributor Inc. case analysis",
     "legal://case-law/precedents/smith-litigation",
     async (uri) => {
       logger.info(`Resource requested: ${uri.href}`);
-      
+
       return {
         contents: [{
           uri: uri.href,
@@ -171,6 +171,6 @@ export function registerCaseLawResources(server: McpServer): void {
       };
     }
   );
-  
+
   logger.info("Case law resources registered successfully");
 }

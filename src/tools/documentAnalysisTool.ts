@@ -23,7 +23,8 @@ export function registerDocumentAnalysisTools(server: McpServer): void {
   
   // Contract Risk Analysis Tool
   server.tool(
-    "contractRiskAnalysis",
+    "contract_risk_analysis",
+    "Analyzes legal contracts to identify potential risks, liabilities, and non-standard clauses with severity ratings.",
     {
       contractId: z.string().describe("The ID of the contract to analyze."),
       riskThreshold: z.number().optional().describe("Optional risk threshold level (1-5)."),
@@ -104,7 +105,8 @@ Improvement Recommendations:
   
   // Document Summarization Tool
   server.tool(
-    "documentSummarization",
+    "document_summarization",
+    "Creates concise summaries of legal documents highlighting key provisions, terms, and important details.",
     {
       documentId: z.string().describe("The ID of the document to summarize."),
       maxLength: z.number().optional().describe("Maximum summary length in words."),

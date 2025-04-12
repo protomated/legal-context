@@ -23,7 +23,8 @@ export function registerLegalResearchTools(server: McpServer): void {
   
   // Case Law Search Tool
   server.tool(
-    "caseLawSearch",
+    "case_law_search",
+    "Searches for relevant case law and legal precedents matching specified criteria with jurisdiction and date filters.",
     {
       query: z.string().describe("The search query for finding relevant case law."),
       jurisdiction: z.string().optional().describe("Optional jurisdiction filter."),
@@ -118,7 +119,8 @@ Case Law Search Results for "intellectual property disputes":
   
   // Legal Precedent Analysis Tool
   server.tool(
-    "precedentAnalysis",
+    "precedent_analysis",
+    "Provides detailed analysis of legal precedents with success rates of arguments and similarity to other cases.",
     {
       caseId: z.string().describe("The ID of the case to analyze."),
       comparisonCaseId: z.string().optional().describe("Optional case ID to compare with."),

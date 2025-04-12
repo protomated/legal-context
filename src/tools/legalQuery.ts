@@ -36,7 +36,8 @@ export function registerLegalQueryTool(server: McpServer): void {
   logger.info("Registering legal query tool...");
   
   server.tool(
-    "legalQuery", // Tool name used by Claude
+    "legal_query", // Tool name used by Claude
+    "Process natural language legal queries and provide relevant information from the firm's legal knowledge base.",
     { // Input schema validation using Zod
       query: z.string().describe("The natural language legal query from the user."),
     },

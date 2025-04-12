@@ -25,7 +25,8 @@ export function registerDocumentSearchTools(server: McpServer): void {
 
   // Document Search Tool
   server.tool(
-    "documentSearch",
+    "document_search",
+    "Searches through the firm's document management system for legal documents matching specified criteria.",
     {
       query: z.string().describe("The search query for finding documents."),
       documentType: z.string().optional().describe("Optional document type filter."),
@@ -115,7 +116,8 @@ export function registerDocumentSearchTools(server: McpServer): void {
 
   // Document Metadata Tool
   server.tool(
-    "documentMetadata",
+    "document_metadata",
+    "Retrieves comprehensive metadata information about a specific legal document.",
     {
       documentId: z.string().describe("The ID of the document to get metadata for.")
     },
@@ -203,7 +205,8 @@ export function registerDocumentSearchTools(server: McpServer): void {
 
   // Document Content Tool
   server.tool(
-    "documentContent",
+    "document_content",
+    "Retrieves and displays the full content of a legal document with statistics and metadata summary.",
     {
       documentId: z.string().describe("The ID of the document to retrieve content for.")
     },
