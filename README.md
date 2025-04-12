@@ -119,35 +119,43 @@ bun dev
 1. Open Claude Desktop
 
 2. Configure Claude to use LegalContext as an MCP server:
-   - Locate the Claude Desktop configuration file:
+   - Locate the Claude Desktop configuration file (`claude_desktop_config.json`):
      - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
      - On Windows: `%APPDATA%\Claude\claude_desktop_config.json`
      - On Linux: `~/.config/Claude/claude_desktop_config.json`
 
-   - Create or edit the file with the following structure:
+   - Create or edit the `claude_desktop_config.json` file with the following structure:
      ```json
      {
        "mcpServers": {
          "legalcontext": {
-           "command": "/path/to/bun",
-           "args": ["/path/to/legal-context/src/server.ts"],
-           "cwd": "/path/to/legal-context"
+           "command": "/absolute/path/to/bun",
+           "args": ["/absolute/path/to/legal-context/src/server.ts"],
+           "cwd": "/absolute/path/to/legal-context"
          }
        }
      }
      ```
 
-   - Replace `/path/to/bun` with the actual path to your Bun executable:
+   - For the `command` field, specify the absolute path to your Bun executable:
      - Find it using `which bun` on macOS/Linux
      - Typically located at `~/.bun/bin/bun` on macOS or `/usr/local/bin/bun`
+     - Example: `"command": "~/.bun/bin/bun"`
 
-   - Replace `/path/to/legal-context` with the absolute path to your cloned repository
+   - For the `args` field, provide an array containing the absolute path to the main server TypeScript file:
+     - Example: `"args": ["/Users/username/projects/legal-context/src/server.ts"]`
 
-   - Note: Do not edit the main `config.json` file, only the `claude_desktop_config.json` file
+   - For the `cwd` field, specify the absolute path to your cloned repository:
+     - Example: `"cwd": "/Users/username/projects/legal-context"`
+
+   - **IMPORTANT**: Do NOT edit the main `config.json` file. Only edit the `claude_desktop_config.json` file.
 
    **Pro Tip**: Use our setup script (`./install.sh`) to automatically configure Claude Desktop.
 
-3. Restart Claude Desktop to apply the configuration
+3. Restart Claude Desktop to apply the configuration:
+   - Quit Claude Desktop completely (not just closing the window)
+   - Relaunch Claude Desktop
+   - LegalContext should now appear as an available server in Claude Desktop
 
 4. Start querying your legal documents!
 
