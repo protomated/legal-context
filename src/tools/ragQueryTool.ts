@@ -19,7 +19,70 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../logger";
 import { config } from "../config";
 import { getDocumentIndexer } from "../documents/documentIndexer";
+import { SearchResult } from "../documents/documentIndexer";
 import { createAugmentedPrompt } from "./ragPromptAugmentation";
+
+/**
+ * Extract citation metadata from search results
+ *
+ * @param searchResults - The search results from the document indexer
+ * @param query - The original user query
+ * @returns An object containing citation metadata
+ */
+function extractCitationMetadata(searchResults: SearchResult[], query: string): Record<string, any> {
+  // Group chunks by document
+  const documentMap: Record<string, {
+    documentId: string;
+    documentName: string;
+    uri: string;
+    relevance: number;
+    metadata?: Record<string, any>;
+    chunks: Array<{
+      text: string;
+      relevance: number;
+    }>;
+  }> = {};
+
+  // Process each search result
+  searchResults.forEach(result => {
+    const docId = result.documentId;
+    const relevancePercentage = ((1 - result.score) * 100);
+
+    // Create or update document entry
+    if (!documentMap[docId]) {
+      documentMap[docId] = {
+        documentId: docId,
+        documentName: result.documentName,
+        uri: `legal://documents/${docId}`,
+        relevance: relevancePercentage,
+        metadata: result.metadata,
+        chunks: []
+      };
+    } else {
+      // Update document relevance if this chunk is more relevant
+      if (relevancePercentage > documentMap[docId].relevance) {
+        documentMap[docId].relevance = relevancePercentage;
+      }
+    }
+
+    // Add chunk information
+    documentMap[docId].chunks.push({
+      text: result.text.substring(0, 100) + "...", // Include a preview of the text
+      relevance: relevancePercentage
+    });
+  });
+
+  // Convert to array and sort by relevance
+  const citations = Object.values(documentMap)
+    .sort((a, b) => b.relevance - a.relevance);
+
+  return {
+    query,
+    citations,
+    totalDocuments: citations.length,
+    totalChunks: searchResults.length
+  };
+}
 
 // Daily query counter for free tier limitation
 let queryCount = 0;
@@ -105,12 +168,23 @@ export function registerRagQueryTool(server: McpServer): void {
         // Create augmented prompt with retrieved context and query
         const augmentedPrompt = createAugmentedPrompt(query, searchResults);
 
-        // Return the augmented prompt for Claude to respond to
+        // Extract citation metadata from search results
+        const citationMetadata = extractCitationMetadata(searchResults, query);
+
+        // Return the augmented prompt and citation metadata as a CallToolResult
         return {
-          content: [{
-            type: "text",
-            text: augmentedPrompt
-          }]
+          content: [
+            // Include the augmented prompt as TextContent
+            {
+              type: "text",
+              text: augmentedPrompt
+            },
+            // Include citation metadata as structured data
+            {
+              type: "text",
+              text: JSON.stringify(citationMetadata, null, 2)
+            }
+          ]
         };
       } catch (error) {
         logger.error("Error processing RAG query:", error);

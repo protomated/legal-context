@@ -6,7 +6,7 @@
 
 /**
  * Document Analysis Tool
- * 
+ *
  * This module implements specialized MCP tools for analyzing legal documents.
  * It provides functionality for contract analysis and document summarization.
  */
@@ -20,7 +20,7 @@ import { logger } from "../logger";
  */
 export function registerDocumentAnalysisTools(server: McpServer): void {
   logger.info("Registering document analysis tools...");
-  
+
   // Contract Risk Analysis Tool
   server.tool(
     "contract_risk_analysis",
@@ -31,14 +31,14 @@ export function registerDocumentAnalysisTools(server: McpServer): void {
     },
     async ({ contractId, riskThreshold }) => {
       logger.info(`Analyzing contract risks: ${contractId}, threshold: ${riskThreshold || 'default'}`);
-      
+
       try {
         // This is a placeholder implementation
         // In future stories, we'll implement actual contract analysis logic
-        
+
         // For now, return placeholder data based on contractId
         let response = "Contract risk analysis not available for the specified contract.";
-        
+
         if (contractId === "johnson") {
           response = `
 Contract Risk Analysis for Johnson Service Agreement:
@@ -89,9 +89,34 @@ Improvement Recommendations:
 - Develop standard exit/transition assistance language
 `;
         }
-        
+
+        // Create citation metadata for the contract
+        const citationMetadata = {
+          query: `Contract risk analysis for ${contractId}`,
+          document: {
+            documentId: contractId,
+            documentName: contractId === "johnson" ? "Johnson Service Agreement" :
+                         (contractId === "software-licensing" ? "Software Licensing Agreement" : contractId),
+            uri: `legal://contracts/${contractId}`,
+            relevance: 100,
+            type: "contract"
+          }
+        };
+
+        // Return the response and citation metadata as a CallToolResult
         return {
-          content: [{ type: "text", text: response }]
+          content: [
+            // Include the response as TextContent
+            {
+              type: "text",
+              text: response
+            },
+            // Include citation metadata as structured data
+            {
+              type: "text",
+              text: JSON.stringify(citationMetadata, null, 2)
+            }
+          ]
         };
       } catch (error) {
         logger.error("Error analyzing contract:", error);
@@ -102,7 +127,7 @@ Improvement Recommendations:
       }
     }
   );
-  
+
   // Document Summarization Tool
   server.tool(
     "document_summarization",
@@ -113,14 +138,14 @@ Improvement Recommendations:
     },
     async ({ documentId, maxLength }) => {
       logger.info(`Summarizing document: ${documentId}, max length: ${maxLength || 'default'}`);
-      
+
       try {
         // This is a placeholder implementation
         // In future stories, we'll implement actual document summarization logic
-        
+
         // For now, return placeholder data based on documentId
         let response = "Document summary not available for the specified document.";
-        
+
         if (documentId === "acme-settlement") {
           response = `
 Document Summary: Settlement Agreement with Acme Corp
@@ -157,9 +182,36 @@ Main provisions include:
 Note that this template should be used with the supplemental state-specific addenda when hiring in CA, NY, MA, or WA due to specific state law requirements.
 `;
         }
-        
+
+        // Create citation metadata for the document
+        const citationMetadata = {
+          query: `Document summary for ${documentId}`,
+          document: {
+            documentId: documentId,
+            documentName: documentId === "acme-settlement" ? "Settlement Agreement with Acme Corp" :
+                         (documentId === "employment-template" ? "Standard Employment Contract Template (v3.2)" : documentId),
+            uri: `legal://documents/${documentId}`,
+            relevance: 100,
+            type: "legal_document",
+            created: documentId === "acme-settlement" ? "2024-03-15" : "2024-01-01",
+            category: documentId === "acme-settlement" ? "settlement" : "template"
+          }
+        };
+
+        // Return the response and citation metadata as a CallToolResult
         return {
-          content: [{ type: "text", text: response }]
+          content: [
+            // Include the response as TextContent
+            {
+              type: "text",
+              text: response
+            },
+            // Include citation metadata as structured data
+            {
+              type: "text",
+              text: JSON.stringify(citationMetadata, null, 2)
+            }
+          ]
         };
       } catch (error) {
         logger.error("Error summarizing document:", error);
@@ -170,6 +222,6 @@ Note that this template should be used with the supplemental state-specific adde
       }
     }
   );
-  
+
   logger.info("Document analysis tools registered successfully");
 }
