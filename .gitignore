@@ -51,4 +51,7 @@ test-files/*
 
 # DB
 lancedb/
+*.lance
 
+# Explicitly include Bun lockfile
+!bun.lockb
