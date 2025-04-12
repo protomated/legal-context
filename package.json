@@ -10,8 +10,12 @@
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch run src/server.ts",
-    "digest": "bunx ai-digest",
-    "typecheck": "tsc --noEmit"
+    "setup": "bun run setup.ts",
+    "check:clio": "bun run src/tools/check-clio.ts",
+    "auth:simple": "bun run src/tools/simple-auth.ts",
+    "test:auth": "bun run src/tests/test-auth.ts",
+    "test:clio": "bun run src/tests/test-clio.ts",
+    "digest": "bunx ai-digest"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -21,6 +25,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
+    "office-text-extractor": "^3.0.3",
     "zod": "^3.24.2"
   }
 }

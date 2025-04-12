@@ -10,6 +10,7 @@ import { config } from "./config";
 import { logger } from "./logger";
 import { registerTools } from "./tools";
 import { registerResources } from "./resources";
+import { initializeClioIntegration, shutdownClioIntegration } from "./clio";
 
 /**
  * LegalContext MCP Server
@@ -22,6 +23,17 @@ import { registerResources } from "./resources";
 async function startServer() {
   logger.info(`Initializing LegalContext MCP server in ${config.nodeEnv} mode...`);
   logger.debug("Configuration loaded:", config);
+
+  // Initialize Clio integration
+  logger.info("Initializing Clio integration...");
+  const clioInitialized = await initializeClioIntegration();
+  if (clioInitialized) {
+    logger.info("Clio integration initialized successfully.");
+  } else {
+    logger.warn("Clio integration not fully initialized. Some document features may be limited.");
+    // Continue with server startup even if Clio integration is not fully initialized
+    // This allows users to authenticate later via the OAuth server
+  }
 
   // Create an instance of the MCP server
   const server = new McpServer({
@@ -62,6 +74,14 @@ function handleShutdown(server: McpServer) {
 
   // Note: The McpServer class doesn't have a disconnect method
   // We simply log the shutdown and exit gracefully
+
+  // Shutdown Clio integration
+  try {
+    shutdownClioIntegration();
+    logger.info("Clio integration shutdown complete.");
+  } catch (error) {
+    logger.error("Error shutting down Clio integration:", error);
+  }
 
   logger.info("Server shutdown complete.");
   process.exit(0);

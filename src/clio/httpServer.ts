@@ -20,6 +20,25 @@ import { secureTokenStorage } from "./tokenStorage";
 // Simple in-memory state store for CSRF protection
 const stateStore: Map<string, { createdAt: number }> = new Map();
 
+// Define helper functions to get paths
+function getClioRedirectUri(): string {
+  return config.clioRedirectUri || 'http://127.0.0.1:3001/clio/auth/callback';
+}
+
+function getAuthPath(): string {
+  // Extract /clio/auth from /clio/auth/callback
+  const redirectUri = getClioRedirectUri();
+  const url = new URL(redirectUri);
+  return url.pathname.replace('/callback', '');
+}
+
+function getCallbackPath(): string {
+  // Get the full callback path
+  const redirectUri = getClioRedirectUri();
+  const url = new URL(redirectUri);
+  return url.pathname;
+}
+
 // Clean up expired states (older than 10 minutes)
 function cleanupExpiredStates() {
   const now = Date.now();
@@ -49,20 +68,21 @@ function createAndStoreState(): string {
  * Create and start the OAuth HTTP server
  */
 export function startOAuthServer(): Server {
-  if (!config.port) {
-    throw new Error("PORT environment variable must be set to run the OAuth HTTP server");
-  }
-
-  logger.info(`Starting OAuth HTTP server on port ${config.port}...`);
+  // Use the port from config or default to 3001
+  const port = config.port || 3001;
+  logger.info(`Using port ${port} for OAuth HTTP server`);
+  logger.info(`Starting OAuth HTTP server on port ${port}...`);
 
   return Bun.serve({
-    port: config.port,
+    port: port,
     
     async fetch(req) {
       const url = new URL(req.url);
+      const authPath = getAuthPath();
+      const callbackPath = getCallbackPath();
       
       // Handle the OAuth initiation endpoint
-      if (url.pathname === "/auth/clio") {
+      if (url.pathname === authPath) {
         try {
           // Create and store state
           const state = createAndStoreState();
@@ -82,7 +102,7 @@ export function startOAuthServer(): Server {
       }
       
       // Handle the OAuth callback endpoint
-      if (url.pathname === "/auth/clio/callback") {
+      if (url.pathname === callbackPath) {
         const params = new URLSearchParams(url.search);
         const code = params.get("code");
         const state = params.get("state");
@@ -132,12 +152,30 @@ export function startOAuthServer(): Server {
       
       // Handle home endpoint with link to start auth
       if (url.pathname === "/" || url.pathname === "") {
+        // Print the authentication URL and configuration for debugging
+        const debugInfo = `
+        <h2>Debug Information:</h2>
+        <p>Configuration:</p>
+        <ul>
+          <li>CLIO_CLIENT_ID: ${config.clioClientId}</li>
+          <li>CLIO_REDIRECT_URI: ${config.clioRedirectUri}</li>
+          <li>CLIO_API_REGION: ${config.clioApiRegion}</li>
+          <li>PORT: ${config.port}</li>
+        </ul>
+        <p>Computed Paths:</p>
+        <ul>
+          <li>Auth Path: ${authPath}</li>
+          <li>Callback Path: ${callbackPath}</li>
+        </ul>
+        `;
+        
         return new Response(
           `<html>
             <body>
               <h1>LegalContext Authentication</h1>
               <p>Click below to authenticate with Clio:</p>
-              <a href="/auth/clio">Connect to Clio</a>
+              <a href="${authPath}">Connect to Clio</a>
+              ${debugInfo}
             </body>
           </html>`,
           {

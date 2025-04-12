@@ -34,7 +34,8 @@ export async function initializeClioIntegration(): Promise<boolean> {
       logger.info(`OAuth server started on port ${config.port}`);
       
       // Log authentication URL
-      const authUrl = `http://localhost:${config.port}/auth/clio`;
+      const port = config.port || 3001;
+      const authUrl = `http://localhost:${port}/clio/auth`;
       logger.info(`To authenticate with Clio, visit: ${authUrl}`);
     } catch (error) {
       logger.error("Failed to start OAuth server:", error);

@@ -26,7 +26,7 @@ const LOG_LEVELS = {
 };
 
 // Current log level from config
-const currentLevel = LOG_LEVELS[config.logLevel];
+let currentLogLevel = LOG_LEVELS[config.logLevel];
 
 /**
  * Logger class with methods for different log levels
@@ -34,10 +34,30 @@ const currentLevel = LOG_LEVELS[config.logLevel];
  */
 class Logger {
   /**
+   * Set the current log level
+   */
+  set level(level: string) {
+    if (level in LOG_LEVELS) {
+      currentLogLevel = LOG_LEVELS[level as keyof typeof LOG_LEVELS];
+    } else {
+      console.error(`[LOGGER] Invalid log level: ${level}. Using default.`);
+    }
+  }
+
+  /**
+   * Get the current log level
+   */
+  get level(): string {
+    return Object.keys(LOG_LEVELS).find(
+      key => LOG_LEVELS[key as keyof typeof LOG_LEVELS] === currentLogLevel
+    ) || config.logLevel;
+  }
+  
+  /**
    * Log a debug message (most verbose)
    */
   debug(message: string, ...args: any[]): void {
-    if (currentLevel <= LOG_LEVELS.debug) {
+    if (currentLogLevel <= LOG_LEVELS.debug) {
       console.error(`[DEBUG] ${message}`, ...args);
     }
   }
@@ -46,7 +66,7 @@ class Logger {
    * Log an info message
    */
   info(message: string, ...args: any[]): void {
-    if (currentLevel <= LOG_LEVELS.info) {
+    if (currentLogLevel <= LOG_LEVELS.info) {
       console.error(`[INFO] ${message}`, ...args);
     }
   }
@@ -55,7 +75,7 @@ class Logger {
    * Log a warning message
    */
   warn(message: string, ...args: any[]): void {
-    if (currentLevel <= LOG_LEVELS.warn) {
+    if (currentLogLevel <= LOG_LEVELS.warn) {
       console.error(`[WARN] ${message}`, ...args);
     }
   }
@@ -64,7 +84,7 @@ class Logger {
    * Log an error message (least verbose)
    */
   error(message: string, ...args: any[]): void {
-    if (currentLevel <= LOG_LEVELS.error) {
+    if (currentLogLevel <= LOG_LEVELS.error) {
       console.error(`[ERROR] ${message}`, ...args);
     }
   }

@@ -54,10 +54,21 @@ export function generateAuthorizationUrl(state: string): string {
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/authorize', baseUrl);
   
+  // Use the configured client ID and redirect URI from the environment
+  const clientId = config.clioClientId;
+  if (!clientId) {
+    throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
+  }
+  
+  const redirectUri = config.clioRedirectUri;
+  if (!redirectUri) {
+    throw new Error('CLIO_REDIRECT_URI is not configured in environment variables');
+  }
+  
   // Add required query parameters
   url.searchParams.append('response_type', 'code');
-  url.searchParams.append('client_id', config.clioClientId!);
-  url.searchParams.append('redirect_uri', config.clioRedirectUri!);
+  url.searchParams.append('client_id', clientId);
+  url.searchParams.append('redirect_uri', redirectUri);
   url.searchParams.append('state', state);
   
   return url.toString();
@@ -72,13 +83,33 @@ export async function exchangeCodeForTokens(code: string): Promise<ClioTokens> {
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/token', baseUrl);
   
-  // Create request body
+  // Use the configured client ID, client secret, and redirect URI from the environment
+  const clientId = config.clioClientId;
+  if (!clientId) {
+    throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
+  }
+  
+  const clientSecret = config.clioClientSecret;
+  if (!clientSecret) {
+    throw new Error('CLIO_CLIENT_SECRET is not configured in environment variables');
+  }
+  
+  const redirectUri = config.clioRedirectUri;
+  if (!redirectUri) {
+    throw new Error('CLIO_REDIRECT_URI is not configured in environment variables');
+  }
+  
+  // Create request body with all parameters
   const body = new URLSearchParams();
   body.append('grant_type', 'authorization_code');
   body.append('code', code);
-  body.append('client_id', config.clioClientId!);
-  body.append('client_secret', config.clioClientSecret!);
-  body.append('redirect_uri', config.clioRedirectUri!);
+  body.append('redirect_uri', redirectUri);
+  body.append('client_id', clientId);
+  body.append('client_secret', clientSecret);
+  
+  // Log request details for debugging (redact sensitive info)
+  logger.debug(`Token exchange URL: ${url.toString()}`);
+  logger.debug(`Request body: grant_type=authorization_code, code=REDACTED, redirect_uri=${redirectUri}, client_id=${clientId}, client_secret=REDACTED`);
   
   try {
     const response = await fetch(url.toString(), {
@@ -119,12 +150,27 @@ export async function refreshAccessToken(refreshToken: string): Promise<ClioToke
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/token', baseUrl);
   
-  // Create request body
+  // Use the configured client ID and client secret from the environment
+  const clientId = config.clioClientId;
+  if (!clientId) {
+    throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
+  }
+  
+  const clientSecret = config.clioClientSecret;
+  if (!clientSecret) {
+    throw new Error('CLIO_CLIENT_SECRET is not configured in environment variables');
+  }
+  
+  // Create request body with all parameters
   const body = new URLSearchParams();
   body.append('grant_type', 'refresh_token');
   body.append('refresh_token', refreshToken);
-  body.append('client_id', config.clioClientId!);
-  body.append('client_secret', config.clioClientSecret!);
+  body.append('client_id', clientId);
+  body.append('client_secret', clientSecret);
+  
+  // Log request details for debugging (redact sensitive info)
+  logger.debug(`Token refresh URL: ${url.toString()}`);
+  logger.debug(`Request body: grant_type=refresh_token, refresh_token=REDACTED, client_id=${clientId}, client_secret=REDACTED`);
   
   try {
     const response = await fetch(url.toString(), {

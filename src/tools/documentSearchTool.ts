@@ -6,7 +6,7 @@
 
 /**
  * Document Search Tool
- * 
+ *
  * This module implements MCP tools for searching legal documents.
  * It provides functionality for finding documents by various criteria.
  */
@@ -14,13 +14,15 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../logger";
+import { getClioApiClient, ClioDocument } from "../clio";
+import { processDocument } from "../documents/documentProcessor";
 
 /**
  * Register document search tools with the MCP server
  */
 export function registerDocumentSearchTools(server: McpServer): void {
   logger.info("Registering document search tools...");
-  
+
   // Document Search Tool
   server.tool(
     "documentSearch",
@@ -35,101 +37,69 @@ export function registerDocumentSearchTools(server: McpServer): void {
     },
     async ({ query, documentType, dateRange, client }) => {
       logger.info(`Searching documents: ${query}, type: ${documentType || 'all'}, dateRange: ${JSON.stringify(dateRange || {})}, client: ${client || 'all'}`);
-      
+
       try {
-        // This is a placeholder implementation
-        // In future stories, we'll implement actual document search logic
-        
-        // For now, return placeholder data based on query keywords
-        let response = "No documents found matching the specified criteria.";
-        
-        if (query.toLowerCase().includes("non-compete") || (documentType && documentType.toLowerCase().includes("non-compete"))) {
-          response = `
-Document Search Results for "non-compete agreements drafted in the last year":
+        // Get the Clio API client
+        const clioApiClient = getClioApiClient();
 
-1. TechCorp Senior Executive Agreement
-   Document Type: Non-Compete Agreement
-   Date: May 15, 2024
-   Client: TechCorp Inc.
-   Key Terms: 2-year duration, North America geographic scope, Technology sector limitations
-   URL: legal://documents/non-compete-agreements/techcorp-executive
-
-2. SalesForce Regional Manager Contract
-   Document Type: Non-Compete Agreement
-   Date: March 3, 2024
-   Client: SalesForce Solutions LLC
-   Key Terms: 18-month duration, Eastern US geographic scope, CRM sector limitations
-   URL: legal://documents/non-compete-agreements/salesforce-manager
-
-3. BioResearch Scientist Employment Terms
-   Document Type: Non-Compete Agreement with IP Assignment
-   Date: January 22, 2024
-   Client: BioResearch Innovations Inc.
-   Key Terms: 3-year duration, Global geographic scope, Specific research field limitations
-   URL: legal://documents/non-compete-agreements/bioresearch-scientist
-
-4. Consulting Firm Partner Agreement
-   Document Type: Non-Compete and Non-Solicitation Agreement
-   Date: November 8, 2023
-   Client: Strategic Consulting Partners
-   Key Terms: 1-year duration, Client-specific restrictions, No geographic limitations
-   URL: legal://documents/non-compete-agreements/consulting-partner
-
-5. Healthcare Administrator Contract
-   Document Type: Non-Compete Agreement
-   Date: August 30, 2023
-   Client: Regional Healthcare Systems
-   Key Terms: 2-year duration, 50-mile radius geographic scope, Healthcare admin limitations
-   URL: legal://documents/non-compete-agreements/healthcare-admin
-`;
-        } else if (query.toLowerCase().includes("merger") && 
-                (query.toLowerCase().includes("acquisition") || 
-                 query.toLowerCase().includes("acquisitions"))) {
-          response = `
-Document Search Results for "merger and acquisition contracts with technology companies":
-
-1. TechStart Acquisition by MegaCorp
-   Document Type: Share Purchase Agreement
-   Date: April 2, 2024
-   Parties: MegaCorp Inc. (Buyer), TechStart Innovations Inc. (Target), Founders (Sellers)
-   Transaction Value: $85M
-   Key Terms: 20% earnout over 3 years, Founder retention incentives, IP warranty package
-   URL: legal://documents/merger-acquisitions/techstart-megacorp
-   
-2. Cloud Services Merger Agreement
-   Document Type: Merger Agreement
-   Date: February 17, 2024
-   Parties: CloudTech Inc., ServerSolutions LLC
-   Transaction Value: $120M (all-stock transaction)
-   Key Terms: Equal board representation, Technology integration plan, Customer transition terms
-   URL: legal://documents/merger-acquisitions/cloudtech-server
-   
-3. FinTech Platform Acquisition Terms
-   Document Type: Asset Purchase Agreement
-   Date: December 9, 2023
-   Parties: Global Payments Inc. (Buyer), PaymentInnovations (Seller)
-   Transaction Value: $45M plus performance incentives
-   Key Terms: API transition support, Customer contract assignments, Regulatory approvals
-   URL: legal://documents/merger-acquisitions/fintech-global
-   
-4. Hardware Manufacturer Merger Documents
-   Document Type: Merger Agreement with Ancillary Documents
-   Date: October 21, 2023
-   Parties: PrecisionHardware Corp., TechComponents Inc.
-   Transaction Value: $250M (cash and stock)
-   Key Terms: Manufacturing facility integration, Supply chain commitments, Patent cross-licensing
-   URL: legal://documents/merger-acquisitions/precision-techcomponents
-   
-5. SaaS Provider Acquisition Agreement
-   Document Type: Stock Purchase Agreement
-   Date: August 5, 2023
-   Parties: Enterprise Solutions Inc. (Buyer), CloudSaaS LLC (Target)
-   Transaction Value: $65M
-   Key Terms: Customer retention incentives, Product roadmap commitments, SLA guarantees
-   URL: legal://documents/merger-acquisitions/saas-enterprise
-`;
+        // Check if Clio API client is initialized
+        if (!await clioApiClient.initialize()) {
+          logger.warn("Clio API client not initialized. Using placeholder data.");
+          return {
+            content: [{
+              type: "text",
+              text: "Clio integration is not authenticated. Please visit the authentication URL to connect with Clio."
+            }],
+            isError: true,
+          };
         }
-        
+
+        // Search for documents in Clio
+        logger.info(`Searching Clio documents with query: ${query}`);
+        const searchResults = await clioApiClient.listDocuments(1, 10, query);
+
+        // Check if any documents were found
+        if (!searchResults.data || searchResults.data.length === 0) {
+          return {
+            content: [{ type: "text", text: "No documents found matching the specified criteria." }]
+          };
+        }
+
+        // Format the search results
+        let response = `Document Search Results for "${query}":\n\n`;
+
+        searchResults.data.forEach((doc, index) => {
+          response += `${index + 1}. ${doc.name}\n`;
+          response += `   Document ID: ${doc.id}\n`;
+          response += `   Created: ${new Date(doc.created_at).toLocaleDateString()}\n`;
+          response += `   Updated: ${new Date(doc.updated_at).toLocaleDateString()}\n`;
+
+          if (doc.content_type) {
+            response += `   Type: ${doc.content_type}\n`;
+          }
+
+          if (doc.category) {
+            response += `   Category: ${doc.category}\n`;
+          }
+
+          if (doc.parent_folder && doc.parent_folder.name) {
+            response += `   Folder: ${doc.parent_folder.name}\n`;
+          }
+
+          if (doc.size) {
+            response += `   Size: ${Math.round(doc.size / 1024)} KB\n`;
+          }
+
+          response += `   URL: legal://documents/${doc.id}\n\n`;
+        });
+
+        // Add pagination info
+        const totalDocuments = searchResults.meta.paging.total_entries;
+        const totalPages = searchResults.meta.paging.total_pages;
+        const currentPage = searchResults.meta.paging.page;
+
+        response += `Showing ${searchResults.data.length} of ${totalDocuments} documents (Page ${currentPage} of ${totalPages})`;
+
         return {
           content: [{ type: "text", text: response }]
         };
@@ -142,7 +112,7 @@ Document Search Results for "merger and acquisition contracts with technology co
       }
     }
   );
-  
+
   // Document Metadata Tool
   server.tool(
     "documentMetadata",
@@ -151,58 +121,76 @@ Document Search Results for "merger and acquisition contracts with technology co
     },
     async ({ documentId }) => {
       logger.info(`Getting document metadata: ${documentId}`);
-      
+
       try {
-        // This is a placeholder implementation
-        // In future stories, we'll implement actual document metadata retrieval
-        
-        // For now, return placeholder data based on documentId
-        let response = "Document metadata not available for the specified document.";
-        
-        if (documentId === "techstart-megacorp") {
-          response = `
-Document Metadata for TechStart Acquisition by MegaCorp:
+        // Get the Clio API client
+        const clioApiClient = getClioApiClient();
 
-Basic Information:
-- Document Type: Share Purchase Agreement
-- Creation Date: April 2, 2024
-- Last Modified: April 10, 2024
-- File Format: PDF
-- Size: 8.2 MB
-- Pages: 124
-- Language: English
-- Version: Final (v3.2)
-
-Classification:
-- Primary Category: Mergers & Acquisitions
-- Secondary Categories: Technology, Corporate, IP
-- Confidentiality: High (Restricted Access)
-- Retention Period: 10 years (permanent archival)
-
-Related Parties:
-- MegaCorp Inc. (Buyer)
-- TechStart Innovations Inc. (Target)
-- TechStart Founders (Sellers)
-- MegaCorp Legal Department (Internal)
-- Smith & Johnson LLP (External Counsel)
-
-Associated Documents:
-- Due Diligence Report (March 15, 2024)
-- IP Assignment Schedule (April 2, 2024)
-- Escrow Agreement (April 2, 2024)
-- Board Resolution - MegaCorp (March 28, 2024)
-- Board Resolution - TechStart (March 27, 2024)
-
-Access History:
-- Downloaded by: Sarah Chen (Partner) on April 12, 2024
-- Viewed by: Mark Johnson (Associate) on April 8, 2024
-- Shared with: Client Portal on April 3, 2024
-`;
+        // Check if Clio API client is initialized
+        if (!await clioApiClient.initialize()) {
+          logger.warn("Clio API client not initialized. Using placeholder data.");
+          return {
+            content: [{
+              type: "text",
+              text: "Clio integration is not authenticated. Please visit the authentication URL to connect with Clio."
+            }],
+            isError: true,
+          };
         }
-        
-        return {
-          content: [{ type: "text", text: response }]
-        };
+
+        // Get document metadata from Clio
+        logger.info(`Retrieving Clio document metadata for ID: ${documentId}`);
+
+        try {
+          const documentData = await clioApiClient.getDocument(documentId);
+          const document = documentData.data;
+
+          // Format the document metadata
+          let response = `Document Metadata for ${document.name}:\n\n`;
+
+          response += `Basic Information:\n`;
+          response += `- Document ID: ${document.id}\n`;
+          response += `- UUID: ${document.uuid}\n`;
+          response += `- Name: ${document.name}\n`;
+
+          if (document.content_type) {
+            response += `- Content Type: ${document.content_type}\n`;
+          }
+
+          if (document.category) {
+            response += `- Category: ${document.category}\n`;
+          }
+
+          if (document.date) {
+            response += `- Document Date: ${document.date}\n`;
+          }
+
+          if (document.size) {
+            response += `- Size: ${Math.round(document.size / 1024)} KB\n`;
+          }
+
+          response += `- Created: ${new Date(document.created_at).toLocaleString()}\n`;
+          response += `- Last Modified: ${new Date(document.updated_at).toLocaleString()}\n`;
+
+          if (document.parent_folder) {
+            response += `\nLocation:\n`;
+            response += `- Parent Folder: ${document.parent_folder.name} (ID: ${document.parent_folder.id})\n`;
+          }
+
+          // Add download link
+          response += `\nActions:\n`;
+          response += `- Download URL: legal://documents/${document.id}/download\n`;
+
+          return {
+            content: [{ type: "text", text: response }]
+          };
+        } catch (docError) {
+          // If document not found or other API error
+          logger.error(`Error retrieving document metadata for ID ${documentId}:`, docError);
+          return {
+            content: [{ type: "text", text: `Document with ID "${documentId}" not found or not accessible.` }]
+          };
+        }
       } catch (error) {
         logger.error("Error getting document metadata:", error);
         return {
@@ -212,6 +200,63 @@ Access History:
       }
     }
   );
-  
+
+  // Document Content Tool
+  server.tool(
+    "documentContent",
+    {
+      documentId: z.string().describe("The ID of the document to retrieve content for.")
+    },
+    async ({ documentId }) => {
+      logger.info(`Retrieving document content: ${documentId}`);
+
+      try {
+        // Get the document content using the document processor
+        const processedDocument = await processDocument(documentId);
+
+        // Format the response
+        let response = `Document Content: ${processedDocument.name}\n\n`;
+
+        // Add metadata summary
+        response += `Metadata Summary:\n`;
+        response += `- Document ID: ${processedDocument.id}\n`;
+        response += `- Size: ${processedDocument.metadata.size ? Math.round(processedDocument.metadata.size / 1024) + ' KB' : 'Unknown'}\n`;
+        if (processedDocument.metadata.contentType) {
+          response += `- Type: ${processedDocument.metadata.contentType}\n`;
+        }
+        response += `- Created: ${new Date(processedDocument.metadata.created).toLocaleDateString()}\n`;
+        response += `- Updated: ${new Date(processedDocument.metadata.updated).toLocaleDateString()}\n`;
+
+        // Add document content
+        response += `\nDocument Content:\n`;
+        response += `----------------------------------------\n`;
+
+        // Limit content length for display
+        const maxContentLength = 10000; // Limit to 10,000 characters
+        const contentPreview = processedDocument.text.length > maxContentLength
+          ? processedDocument.text.substring(0, maxContentLength) + '... [Content truncated, full content available for processing]'
+          : processedDocument.text;
+
+        response += contentPreview;
+        response += `\n----------------------------------------\n`;
+
+        // Add content stats
+        response += `\nContent Statistics:\n`;
+        response += `- Total Characters: ${processedDocument.text.length}\n`;
+        response += `- Word Count (approx): ${processedDocument.text.split(/\s+/).length}\n`;
+
+        return {
+          content: [{ type: "text", text: response }]
+        };
+      } catch (error) {
+        logger.error("Error retrieving document content:", error);
+        return {
+          content: [{ type: "text", text: "An error occurred while retrieving document content." }],
+          isError: true,
+        };
+      }
+    }
+  );
+
   logger.info("Document search tools registered successfully");
 }
