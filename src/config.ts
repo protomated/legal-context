@@ -52,7 +52,14 @@ const requiredEnvVars: Array<keyof Config> = [
 
 // Load and validate environment variables
 function loadConfig(): Config {
-  // Bun automatically loads .env files, so we can access process.env directly
+  // Explicitly log environment variables for debugging
+  if (process.env.LOG_LEVEL === 'debug') {
+    console.error('Debug: Loading config with env vars:');
+    console.error('Debug: CLIO_CLIENT_ID:', process.env.CLIO_CLIENT_ID ? '[PRESENT]' : '[MISSING]');
+    console.error('Debug: CLIO_CLIENT_SECRET:', process.env.CLIO_CLIENT_SECRET ? '[PRESENT]' : '[MISSING]');
+    console.error('Debug: CLIO_REDIRECT_URI:', process.env.CLIO_REDIRECT_URI);
+    console.error('Debug: CLIO_API_REGION:', process.env.CLIO_API_REGION);
+  }
   
   // Create the config object with default values
   const config: Config = {
@@ -95,7 +102,18 @@ export function validateClioConfig() {
   const requiredClioVars = ['clioClientId', 'clioClientSecret', 'clioRedirectUri', 'clioApiRegion'];
   const missingClioVars = requiredClioVars.filter(varName => !config[varName as keyof Config]);
   
+  // Output configuration status to stderr (won't affect MCP protocol)
+  console.error('Validating Clio configuration:');
+  console.error('- CLIO_CLIENT_ID:', config.clioClientId ? 'Present' : 'Missing');
+  console.error('- CLIO_CLIENT_SECRET:', config.clioClientSecret ? 'Present' : 'Missing');
+  console.error('- CLIO_REDIRECT_URI:', config.clioRedirectUri || 'Missing');
+  console.error('- CLIO_API_REGION:', config.clioApiRegion || 'Missing');
+  
   if (missingClioVars.length > 0) {
+    console.error(`ERROR: Missing required Clio API configuration: ${missingClioVars.join(', ')}`);
     throw new Error(`Missing required Clio API configuration: ${missingClioVars.join(', ')}`);
   }
+  
+  console.error('Clio configuration validation successful');
+  return true;
 }

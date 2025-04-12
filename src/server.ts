@@ -12,6 +12,35 @@ import { registerTools } from "./tools";
 import { registerResources } from "./resources";
 import { initializeClioIntegration, shutdownClioIntegration } from "./clio";
 
+// Explicitly load environment variables
+import { join } from "path";
+import { readFileSync } from "fs";
+
+// Function to explicitly load environment variables from .env file
+function loadEnvFile() {
+  try {
+    const envPath = join(import.meta.dir, '../.env');
+    logger.info(`Loading environment variables from: ${envPath}`);
+    
+    const envContent = readFileSync(envPath, 'utf8');
+    const envVars = envContent.split('\n');
+    
+    for (const line of envVars) {
+      const trimmedLine = line.trim();
+      if (trimmedLine && !trimmedLine.startsWith('#')) {
+        const [key, value] = trimmedLine.split('=');
+        if (key && value) {
+          process.env[key.trim()] = value.trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+        }
+      }
+    }
+    
+    logger.info('Environment variables loaded successfully');
+  } catch (error) {
+    logger.error('Failed to load environment variables:', error);
+  }
+}
+
 /**
  * LegalContext MCP Server
  *
@@ -21,18 +50,33 @@ import { initializeClioIntegration, shutdownClioIntegration } from "./clio";
  */
 
 async function startServer() {
+  // Explicitly load .env variables first
+  loadEnvFile();
+  
+  // Display environment variables for debugging
+  logger.debug('Loaded CLIO_CLIENT_ID:', process.env.CLIO_CLIENT_ID ? 'Present (not shown for security)' : 'Missing');
+  logger.debug('Loaded CLIO_CLIENT_SECRET:', process.env.CLIO_CLIENT_SECRET ? 'Present (not shown for security)' : 'Missing');
+  logger.debug('Loaded CLIO_REDIRECT_URI:', process.env.CLIO_REDIRECT_URI);
+  logger.debug('Loaded CLIO_API_REGION:', process.env.CLIO_API_REGION);
+  
   logger.info(`Initializing LegalContext MCP server in ${config.nodeEnv} mode...`);
   logger.debug("Configuration loaded:", config);
 
   // Initialize Clio integration
   logger.info("Initializing Clio integration...");
-  const clioInitialized = await initializeClioIntegration();
-  if (clioInitialized) {
-    logger.info("Clio integration initialized successfully.");
-  } else {
-    logger.warn("Clio integration not fully initialized. Some document features may be limited.");
-    // Continue with server startup even if Clio integration is not fully initialized
-    // This allows users to authenticate later via the OAuth server
+  try {
+    const clioInitialized = await initializeClioIntegration();
+    if (clioInitialized) {
+      logger.info("Clio integration initialized successfully.");
+    } else {
+      logger.warn("Clio integration not fully initialized. Some document features may be limited.");
+      // Continue with server startup even if Clio integration is not fully initialized
+      // This allows users to authenticate later via the OAuth server
+    }
+  } catch (error) {
+    logger.error("Failed to initialize Clio integration:", error);
+    logger.warn("Continuing with server startup without Clio integration.");
+    // Continue with server startup even if Clio integration fails completely
   }
 
   // Create an instance of the MCP server

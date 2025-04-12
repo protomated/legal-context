@@ -28,6 +28,15 @@ export interface ClioTokens {
  * Get the base URL for Clio API based on the configured region
  */
 export function getClioBaseUrl(): string {
+  // Check if all required Clio config is available
+  const requiredClioVars = ['clioClientId', 'clioClientSecret', 'clioRedirectUri', 'clioApiRegion'];
+  const missingClioVars = requiredClioVars.filter(varName => !config[varName as keyof typeof config]);
+  
+  if (missingClioVars.length > 0) {
+    logger.warn(`Missing Clio configuration: ${missingClioVars.join(', ')}. Using default US region.`);
+    return 'https://app.clio.com'; // Default to US region
+  }
+  
   validateClioConfig(); // Ensure Clio config is valid
   
   // Return region-specific URL

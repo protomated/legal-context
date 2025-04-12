@@ -47,6 +47,12 @@ export async function initializeClioIntegration(): Promise<boolean> {
   
   // Initialize API client
   try {
+    // Check if we have Clio credentials
+    if (!config.clioClientId || !config.clioClientSecret || !config.clioRedirectUri) {
+      logger.warn("Clio API credentials not configured. Skipping Clio integration.");
+      return false;
+    }
+
     const initialized = await clioApiClient.initialize();
     if (!initialized) {
       if (oauthServer) {

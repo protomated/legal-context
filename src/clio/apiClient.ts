@@ -70,7 +70,13 @@ export class ClioApiClient {
   private baseUrl: string;
   
   constructor() {
-    this.baseUrl = getClioBaseUrl();
+    try {
+      this.baseUrl = getClioBaseUrl();
+    } catch (error) {
+      // Default to US region if Clio config validation fails
+      this.baseUrl = 'https://app.clio.com';
+      logger.warn('Using default Clio API base URL due to missing configuration');
+    }
   }
   
   /**
