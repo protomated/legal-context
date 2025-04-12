@@ -266,13 +266,13 @@ export function registerDocumentSearchTools(server: McpServer): void {
   // Semantic Document Search Tool
   server.tool(
     "semantic_document_search",
-    "Performs semantic search across indexed documents to find content similar to the query, regardless of exact keyword matches.",
+    "Performs semantic vector search across indexed documents to find content similar to the query, regardless of exact keyword matches.",
     {
       query: z.string().describe("The search query to find semantically similar document content."),
       limit: z.number().min(1).max(20).optional().describe("Maximum number of results to return (default: 5).")
     },
     async ({ query, limit = 5 }) => {
-      logger.info(`Performing semantic search: "${query}" with limit ${limit}`);
+      logger.info(`Performing semantic vector search: "${query}" with limit ${limit}`);
 
       try {
         // Get the document indexer
@@ -287,7 +287,7 @@ export function registerDocumentSearchTools(server: McpServer): void {
         const indexStats = await documentIndexer.getIndexStats();
 
         // Check if there are any documents in the index
-        if (indexStats.documentCount === 0) {
+        if (indexStats.documentCount === 0 && indexStats.chunkCount === 0) {
           return {
             content: [{
               type: "text",
@@ -296,10 +296,11 @@ export function registerDocumentSearchTools(server: McpServer): void {
           };
         }
 
-        // Perform the semantic search
+        // Generate query embedding and perform vector similarity search
+        // This implements Story 4.2: Semantic Search Implementation
         const searchResults = await documentIndexer.searchDocuments(query, limit);
 
-        // Check if any results were found
+        // Handle scenarios with few or no results gracefully
         if (searchResults.length === 0) {
           return {
             content: [{
@@ -310,27 +311,35 @@ export function registerDocumentSearchTools(server: McpServer): void {
         }
 
         // Format the search results
-        let response = `Semantic Search Results for "${query}":\n\n`;
+        let response = `Semantic Vector Search Results for "${query}":\n\n`;
 
         searchResults.forEach((result, index) => {
           response += `${index + 1}. ${result.documentName}\n`;
           response += `   Document ID: ${result.documentId}\n`;
           response += `   Relevance Score: ${(1 - result.score).toFixed(4)}\n`;
 
-          if (result.metadata.contentType) {
-            response += `   Type: ${result.metadata.contentType}\n`;
-          }
+          // Include metadata in the response
+          if (result.metadata && typeof result.metadata === 'object') {
+            if (result.metadata.contentType) {
+              response += `   Type: ${result.metadata.contentType}\n`;
+            }
 
-          if (result.metadata.category) {
-            response += `   Category: ${result.metadata.category}\n`;
-          }
+            if (result.metadata.category) {
+              response += `   Category: ${result.metadata.category}\n`;
+            }
 
-          if (result.metadata.parentFolder && result.metadata.parentFolder.name) {
-            response += `   Folder: ${result.metadata.parentFolder.name}\n`;
-          }
+            if (result.metadata.parentFolder && result.metadata.parentFolder.name) {
+              response += `   Folder: ${result.metadata.parentFolder.name}\n`;
+            }
 
-          response += `   Created: ${new Date(result.metadata.created).toLocaleDateString()}\n`;
-          response += `   Updated: ${new Date(result.metadata.updated).toLocaleDateString()}\n`;
+            if (result.metadata.created) {
+              response += `   Created: ${new Date(result.metadata.created).toLocaleDateString()}\n`;
+            }
+
+            if (result.metadata.updated) {
+              response += `   Updated: ${new Date(result.metadata.updated).toLocaleDateString()}\n`;
+            }
+          }
 
           // Add a snippet of the matching text
           response += `   Snippet: "${result.text.length > 200 
@@ -340,18 +349,24 @@ export function registerDocumentSearchTools(server: McpServer): void {
           response += `   URL: legal://documents/${result.documentId}\n\n`;
         });
 
-        // Add index statistics
-        response += `\nSearch performed across ${indexStats.documentCount} documents with ${indexStats.chunkCount} indexed chunks.`;
+        // Add index statistics and result count information
+        response += `\nSearch performed across ${indexStats.chunkCount} indexed chunks.`;
+        response += `\nFound ${searchResults.length} relevant document chunk${searchResults.length === 1 ? '' : 's'}.`;
+
+        // Add a note if few results were found
+        if (searchResults.length < 3 && searchResults.length > 0) {
+          response += `\n\nNote: Only ${searchResults.length} result${searchResults.length === 1 ? '' : 's'} found. You may want to try a different query or index more documents.`;
+        }
 
         return {
           content: [{ type: "text", text: response }]
         };
       } catch (error) {
-        logger.error("Error performing semantic search:", error);
+        logger.error("Error performing semantic vector search:", error);
         return {
           content: [{
             type: "text",
-            text: "An error occurred while performing semantic search. Please check the server logs for details."
+            text: "An error occurred while performing semantic vector search. Please check the server logs for details."
           }],
           isError: true,
         };

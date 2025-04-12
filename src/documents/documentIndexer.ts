@@ -104,37 +104,63 @@ export class DocumentIndexer {
       // Check if the vectors table exists
       const tables = await db.tableNames();
 
-      // For testing purposes, drop the table if it exists to ensure schema compatibility
+      // Always recreate the table to ensure schema compatibility
       if (tables.includes('vectors')) {
         logger.info('Dropping existing vectors table in LanceDB to ensure schema compatibility');
         await db.dropTable('vectors');
       }
 
-      logger.info('Creating vectors table in LanceDB with updated schema');
+      // Create a new table with the schema
+      logger.info('Creating new vectors table in LanceDB with schema');
 
-      // Create the table with the schema
-      this.tablePromise = db.createTable('vectors', [
-        {
-          id: 'chunk_1',
-          text: 'Sample text for schema creation',
-          doc_id: 'doc_1',
-          doc_uri: 'Sample Document',
-          chunk_id: 0,
-          vector: new Array(EMBEDDING_DIMENSION).fill(0),
-          metadata: {
-            contentType: 'text/plain',
-            category: 'sample',
-            created: new Date().toISOString(),
-            updated: new Date().toISOString(),
-            parentFolder: {
-              id: 'folder-1',
-              name: 'Sample Folder'
-            }
+      // Sample document for schema definition
+      const sampleChunk = {
+        id: 'sample_chunk',
+        text: 'This is a sample text for schema creation',
+        doc_id: 'sample_doc',
+        doc_uri: 'Sample Document',
+        chunk_id: 0,
+        vector: new Array(EMBEDDING_DIMENSION).fill(0),
+        metadata: {
+          contentType: 'text/plain',
+          category: 'sample',
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+          parentFolder: {
+            id: 'folder-1',
+            name: 'Sample Folder'
           }
         }
-      ]);
+      };
 
-      await this.tablePromise;
+      this.tablePromise = db.createTable('vectors', [sampleChunk]);
+
+      // Wait for table creation to complete
+      const table = await this.tablePromise;
+
+      // Verify the table was created successfully
+      const countResult = await table.countRows();
+      const rowCount = typeof countResult === 'number' ? countResult :
+                      (countResult && countResult.count ? countResult.count : 0);
+
+      logger.info(`Initialized table with ${rowCount} sample row(s)`);
+
+      // Try to query the table to verify it works
+      try {
+        const queryResult = await table.query().execute();
+        const resultArray = Array.isArray(queryResult) ? queryResult :
+                           (queryResult && typeof queryResult === 'object' && queryResult.data ?
+                            queryResult.data : []);
+
+        logger.info(`Verified query access: retrieved ${resultArray.length} row(s)`);
+
+        if (resultArray.length > 0) {
+          logger.debug(`Sample row: ${JSON.stringify(resultArray[0], null, 2)}`);
+        }
+      } catch (queryError) {
+        logger.warn(`Could not verify query access: ${queryError}`);
+      }
+
       this.initialized = true;
       logger.info('Document indexer initialized successfully');
       return true;
@@ -235,6 +261,17 @@ export class DocumentIndexer {
 
   /**
    * Search the index for documents matching a query
+   *
+   * Performs a semantic vector search in LanceDB based on the user's query
+   * to retrieve relevant document chunks with their metadata.
+   *
+   * Implementation of Story 4.2: Semantic Search Implementation
+   * - Gets the query string
+   * - Generates a query embedding using Transformers.js
+   * - Accesses the initialized LanceDB table
+   * - Performs vector similarity search using table.search()
+   * - Retrieves top N results with text content and metadata
+   * - Handles scenarios with few or no results gracefully
    */
   public async searchDocuments(query: string, limit: number = 5): Promise<SearchResult[]> {
     if (!this.initialized) {
@@ -242,16 +279,32 @@ export class DocumentIndexer {
     }
 
     try {
-      logger.info(`Searching documents with query: ${query}`);
+      logger.info(`Performing semantic vector search with query: "${query}"`);
 
-      // Generate embedding for the query
+      // Generate embedding for the query using Transformers.js (Story 3.3)
       const queryEmbedding = await generateQueryEmbedding(query);
+      logger.debug(`Generated query embedding with dimension: ${queryEmbedding.length}`);
 
-      // Get the table
+      // Get the table (access the initialized LanceDB table)
       const table = await this.tablePromise;
 
       try {
-        // Search for similar documents using vector similarity search
+        // Check if the table has any data
+        const countResult = await table.countRows();
+        const rowCount = typeof countResult === 'number' ? countResult :
+                        (countResult && countResult.count ? countResult.count : 0);
+
+        logger.debug(`Table contains ${rowCount} total rows according to countRows()`);
+
+        // Handle case where the table is empty
+        if (rowCount === 0) {
+          logger.warn('No documents have been indexed yet');
+          return [];
+        }
+
+        // Perform vector similarity search using table.search()
+        logger.debug(`Performing vector similarity search with query embedding`);
+
         const searchResults = await table.search(queryEmbedding, 'vector')
           .limit(limit)
           .execute();
@@ -261,25 +314,37 @@ export class DocumentIndexer {
                             (searchResults && typeof searchResults === 'object' && searchResults.data ?
                              searchResults.data : []);
 
-        logger.debug(`Retrieved ${resultsArray.length} results from the database`);
+        logger.debug(`Retrieved ${resultsArray.length} results from vector search`);
 
-        // Map the results to our SearchResult interface
+        // Handle scenarios with few or no results gracefully
+        if (resultsArray.length === 0) {
+          logger.info(`No documents found that semantically match the query: "${query}"`);
+          return [];
+        } else if (resultsArray.length < 3) {
+          // If we have fewer than 3 results, log a message but still return them
+          logger.info(`Found only ${resultsArray.length} results for query: "${query}"`);
+        }
+
+        // Map the results to our SearchResult interface to return text content and metadata
         const mappedResults: SearchResult[] = resultsArray.map(result => ({
           documentId: result.doc_id || '',
           documentName: result.doc_uri || '',
           text: result.text || '',
-          score: result._distance || 0, // LanceDB returns distance as _distance
+          score: result._distance || 0,
           metadata: result.metadata || {}
         }));
 
-        logger.info(`Found ${mappedResults.length} results for query: ${query}`);
+        logger.info(`Found ${mappedResults.length} results for query: "${query}"`);
         return mappedResults;
       } catch (searchError) {
-        logger.warn(`Search operation failed, returning empty results: ${searchError}`);
+        // Handle error cases gracefully
+        logger.warn(`Vector search operation failed: ${searchError}`);
+        logger.info('Returning empty results due to search error');
         return [];
       }
     } catch (error) {
-      logger.error(`Error searching documents:`, error);
+      // Handle error cases gracefully
+      logger.error(`Error performing semantic vector search:`, error);
       return [];
     }
   }
@@ -296,32 +361,57 @@ export class DocumentIndexer {
       // Get the table
       const table = await this.tablePromise;
 
-      // Count total chunks
-      const countResult = await table.countRows();
-      const chunkCount = typeof countResult === 'number' ? countResult :
-                         (countResult && countResult.count ? countResult.count : 0);
-
-      // Get unique document IDs to count documents
+      // Get all chunks using query().execute() to match how we query in searchDocuments
       try {
-        const uniqueDocsQuery = await table.query().select(["doc_id"]).execute();
-        // Handle the case where uniqueDocsQuery might not be an array
-        const docsArray = Array.isArray(uniqueDocsQuery) ? uniqueDocsQuery :
-                         (uniqueDocsQuery && typeof uniqueDocsQuery === 'object' && uniqueDocsQuery.data ?
-                          uniqueDocsQuery.data : []);
+        const allChunks = await table.query().execute();
 
+        // Handle the case where allChunks might not be an array
+        const chunksArray = Array.isArray(allChunks) ? allChunks :
+                           (allChunks && typeof allChunks === 'object' && allChunks.data ?
+                            allChunks.data : []);
+
+        logger.debug(`getIndexStats: Table contains ${chunksArray.length} total chunks via query().execute()`);
+
+        // Also try countRows() to compare
+        const countResult = await table.countRows();
+        const countRowsChunkCount = typeof countResult === 'number' ? countResult :
+                                   (countResult && countResult.count ? countResult.count : 0);
+
+        logger.debug(`getIndexStats: Table contains ${countRowsChunkCount} total chunks via countRows()`);
+
+        // If we have chunks, log a sample to debug
+        if (chunksArray.length > 0) {
+          logger.debug(`getIndexStats: Sample chunk: ${JSON.stringify(chunksArray[0], null, 2)}`);
+        }
+
+        // Get unique document IDs
         const uniqueDocIds = new Set();
-        docsArray.forEach(row => {
+        chunksArray.forEach(row => {
           if (row && row.doc_id) {
             uniqueDocIds.add(row.doc_id);
           }
         });
 
         const documentCount = uniqueDocIds.size;
-        logger.debug(`Index stats: estimated ${documentCount} documents, ${chunkCount} chunks`);
+        const chunkCount = chunksArray.length;
+
+        logger.debug(`Index stats: ${documentCount} documents, ${chunkCount} chunks via query, ${countRowsChunkCount} chunks via countRows`);
         return { documentCount, chunkCount };
       } catch (queryError) {
-        logger.warn(`Error getting unique document IDs: ${queryError}`);
-        return { documentCount: 0, chunkCount };
+        logger.warn(`Error querying chunks: ${queryError}`);
+
+        // Fallback to countRows
+        try {
+          const countResult = await table.countRows();
+          const chunkCount = typeof countResult === 'number' ? countResult :
+                           (countResult && countResult.count ? countResult.count : 0);
+
+          logger.debug(`Index stats (fallback): 0 documents, ${chunkCount} chunks via countRows`);
+          return { documentCount: 0, chunkCount };
+        } catch (countError) {
+          logger.warn(`Error counting rows: ${countError}`);
+          return { documentCount: 0, chunkCount: 0 };
+        }
       }
     } catch (error) {
       logger.error('Error getting index stats:', error);
