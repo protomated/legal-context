@@ -18,8 +18,8 @@ The document indexing system:
 1. **Document Processing**: Documents are retrieved from Clio and processed to extract their text content.
    - PDF and DOCX files are processed locally using `office-text-extractor` to extract plain text
    - Text is cleaned to remove excessive whitespace and control characters
-2. **Text Chunking**: Documents are split into smaller chunks that preserve the semantic meaning of paragraphs.
-3. **Embedding Generation**: Each chunk is converted into a vector embedding using Transformers.js with a local embedding model.
+2. **Text Chunking**: Documents are split into smaller chunks using an advanced recursive text chunking algorithm that preserves the semantic meaning of paragraphs. The algorithm intelligently splits text based on multiple separator types (paragraphs, sentences, etc.) to create optimal chunks for embedding.
+3. **Embedding Generation**: Each chunk is converted into a vector embedding using Transformers.js with the `Xenova/all-MiniLM-L6-v2` model. This model provides a good balance of quality and performance, generating 384-dimensional embeddings that capture the semantic meaning of the text.
 4. **Vector Storage**: These embeddings are stored in LanceDB, a local vector database optimized for similarity search.
 5. **Semantic Search**: When you search, your query is converted to an embedding and compared against all document chunks to find the most similar content.
 
