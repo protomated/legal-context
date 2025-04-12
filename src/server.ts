@@ -2,6 +2,19 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
+ */
+/**
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -21,10 +34,10 @@ function loadEnvFile() {
   try {
     const envPath = join(import.meta.dir, '../.env');
     logger.info(`Loading environment variables from: ${envPath}`);
-    
+
     const envContent = readFileSync(envPath, 'utf8');
     const envVars = envContent.split('\n');
-    
+
     for (const line of envVars) {
       const trimmedLine = line.trim();
       if (trimmedLine && !trimmedLine.startsWith('#')) {
@@ -34,7 +47,7 @@ function loadEnvFile() {
         }
       }
     }
-    
+
     logger.info('Environment variables loaded successfully');
   } catch (error) {
     logger.error('Failed to load environment variables:', error);
@@ -52,13 +65,13 @@ function loadEnvFile() {
 async function startServer() {
   // Explicitly load .env variables first
   loadEnvFile();
-  
+
   // Display environment variables for debugging
   logger.debug('Loaded CLIO_CLIENT_ID:', process.env.CLIO_CLIENT_ID ? 'Present (not shown for security)' : 'Missing');
   logger.debug('Loaded CLIO_CLIENT_SECRET:', process.env.CLIO_CLIENT_SECRET ? 'Present (not shown for security)' : 'Missing');
   logger.debug('Loaded CLIO_REDIRECT_URI:', process.env.CLIO_REDIRECT_URI);
   logger.debug('Loaded CLIO_API_REGION:', process.env.CLIO_API_REGION);
-  
+
   logger.info(`Initializing LegalContext MCP server in ${config.nodeEnv} mode...`);
   logger.debug("Configuration loaded:", config);
 

@@ -2,14 +2,27 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
+ */
+/**
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
  */
 
 /**
  * Logger module for LegalContext
- * 
+ *
  * This module provides a simple logging utility with different log levels
  * based on the configured LOG_LEVEL environment variable.
- * 
+ *
  * IMPORTANT: When using stdio transport with MCP, all stdout is reserved for
  * MCP protocol messages. Therefore, we redirect all logging to stderr to avoid
  * interfering with the MCP communication.
@@ -52,7 +65,7 @@ class Logger {
       key => LOG_LEVELS[key as keyof typeof LOG_LEVELS] === currentLogLevel
     ) || config.logLevel;
   }
-  
+
   /**
    * Log a debug message (most verbose)
    */

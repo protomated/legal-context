@@ -2,11 +2,24 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
+ */
+/**
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * Copyright (c) Protomated
+ * Email: ask@protomated.com
+ * Website: protomated.com
  */
 
 /**
  * Legal Query Tool
- * 
+ *
  * This module implements the MCP tool for handling legal queries.
  * It categorizes queries by type and provides appropriate responses.
  */
@@ -15,17 +28,60 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { logger } from "../logger";
 import { config } from "../config";
+import { existsSync } from "fs";
+
+// File path for storing query counter data
+const QUERY_COUNTER_FILE = "./query_counter.json";
 
 // Daily query counter for free tier limitation
 let queryCount = 0;
 let queryDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
+/**
+ * Load query counter data from file
+ */
+function loadQueryCounter() {
+  try {
+    if (existsSync(QUERY_COUNTER_FILE)) {
+      const data = Bun.file(QUERY_COUNTER_FILE);
+      const counterData = JSON.parse(data.toString());
+      queryCount = counterData.count || 0;
+      queryDate = counterData.date || new Date().toISOString().split('T')[0];
+      logger.debug(`Loaded query counter from file: ${queryCount} queries on ${queryDate}`);
+    } else {
+      logger.debug("No query counter file found, using default values");
+    }
+  } catch (error) {
+    logger.error("Error loading query counter from file:", error);
+    // Continue with default values if file can't be read
+  }
+}
+
+/**
+ * Save query counter data to file
+ */
+async function saveQueryCounter() {
+  try {
+    const counterData = {
+      count: queryCount,
+      date: queryDate
+    };
+    await Bun.write(QUERY_COUNTER_FILE, JSON.stringify(counterData, null, 2));
+    logger.debug(`Saved query counter to file: ${queryCount} queries on ${queryDate}`);
+  } catch (error) {
+    logger.error("Error saving query counter to file:", error);
+  }
+}
+
+// Initialize counter from file on module load
+loadQueryCounter();
+
 // Query type categories
-type QueryCategory = 
-  | "document_summarization" 
-  | "legal_research" 
-  | "document_search" 
-  | "contract_analysis" 
+type QueryCategory =
+  | "document_summarization"
+  | "legal_research"
+  | "document_search"
+  | "contract_analysis"
   | "legal_advice"
   | "unknown";
 
@@ -34,7 +90,7 @@ type QueryCategory =
  */
 export function registerLegalQueryTool(server: McpServer): void {
   logger.info("Registering legal query tool...");
-  
+
   server.tool(
     "legal_query", // Tool name used by Claude
     "Process natural language legal queries and provide relevant information from the firm's legal knowledge base.",
@@ -43,7 +99,7 @@ export function registerLegalQueryTool(server: McpServer): void {
     },
     async ({ query }) => { // Handler function receiving validated arguments
       logger.info(`Received legal query: ${query}`);
-      
+
       // Check and update daily query count for free tier limitation
       const today = new Date().toISOString().split('T')[0];
       if (today !== queryDate) {
@@ -52,36 +108,36 @@ export function registerLegalQueryTool(server: McpServer): void {
         queryDate = today;
         logger.debug("Reset daily query counter for new day");
       }
-      
+
       // Check if we've exceeded the daily query limit
       if (queryCount >= config.maxQueriesPerDay) {
         logger.warn(`Daily query limit (${config.maxQueriesPerDay}) exceeded`);
         return {
-          content: [{ 
-            type: "text", 
-            text: `You have reached the daily limit of ${config.maxQueriesPerDay} queries for the free tier. Please try again tomorrow or upgrade to the premium version.` 
+          content: [{
+            type: "text",
+            text: `You have reached the daily limit of ${config.maxQueriesPerDay} queries for the free tier. Please try again tomorrow or upgrade to the premium version.`
           }],
           isError: true,
         };
       }
-      
+
       // Increment query counter
       queryCount++;
       logger.debug(`Query count for today: ${queryCount}/${config.maxQueriesPerDay}`);
-      
+
       try {
         // Categorize the query
         const category = categorizeQuery(query);
         logger.info(`Query categorized as: ${category}`);
-        
+
         // Generate appropriate context based on query category
         const context = generateQueryContext(query, category);
-        
+
         // Return the augmented context for Claude to respond to
         return {
-          content: [{ 
-            type: "text", 
-            text: context 
+          content: [{
+            type: "text",
+            text: context
           }]
         };
       } catch (error) {
@@ -93,7 +149,7 @@ export function registerLegalQueryTool(server: McpServer): void {
       }
     }
   );
-  
+
   logger.info("Legal query tool registered successfully");
 }
 
@@ -103,69 +159,69 @@ export function registerLegalQueryTool(server: McpServer): void {
 function categorizeQuery(query: string): QueryCategory {
   // Convert query to lowercase for easier matching
   const q = query.toLowerCase();
-  
+
   // Document summarization
   if (
-    q.includes("summarize") || 
-    q.includes("summary") || 
-    q.includes("key points") || 
+    q.includes("summarize") ||
+    q.includes("summary") ||
+    q.includes("key points") ||
     q.includes("main provisions") ||
     (q.includes("settlement agreement") && q.includes("acme corp")) ||
     (q.includes("employment contract") && q.includes("template"))
   ) {
     return "document_summarization";
   }
-  
+
   // Legal research
   if (
-    q.includes("precedent") || 
-    q.includes("case") || 
-    q.includes("research") || 
+    q.includes("precedent") ||
+    q.includes("case") ||
+    q.includes("research") ||
     q.includes("find relevant") ||
     (q.includes("data privacy") && q.includes("healthcare")) ||
     (q.includes("intellectual property") && q.includes("disputes"))
   ) {
     return "legal_research";
   }
-  
+
   // Document search
   if (
-    q.includes("find document") || 
-    q.includes("search for") || 
-    q.includes("locate") || 
+    q.includes("find document") ||
+    q.includes("search for") ||
+    q.includes("locate") ||
     q.includes("find all") ||
     (q.includes("non-compete") && q.includes("drafted")) ||
     (q.includes("merger") && q.includes("acquisition"))
   ) {
     return "document_search";
   }
-  
+
   // Contract analysis
   if (
-    q.includes("analyze") || 
-    q.includes("analysis") || 
-    q.includes("review") || 
-    q.includes("risk") || 
+    q.includes("analyze") ||
+    q.includes("analysis") ||
+    q.includes("review") ||
+    q.includes("risk") ||
     q.includes("clause") ||
     (q.includes("software licensing") && q.includes("agreements")) ||
     (q.includes("johnson contract") && q.includes("risk"))
   ) {
     return "contract_analysis";
   }
-  
+
   // Legal advice
   if (
-    q.includes("advice") || 
-    q.includes("prepare") || 
-    q.includes("argument") || 
-    q.includes("strategy") || 
+    q.includes("advice") ||
+    q.includes("prepare") ||
+    q.includes("argument") ||
+    q.includes("strategy") ||
     q.includes("approach") ||
     (q.includes("arguments") && q.includes("smith litigation")) ||
     (q.includes("documentation") && q.includes("trademark registration"))
   ) {
     return "legal_advice";
   }
-  
+
   // Default case
   return "unknown";
 }
@@ -225,7 +281,7 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       }
       break;
-      
+
     case "legal_research":
       // Check for specific research topics
       if (query.toLowerCase().includes("data privacy") && query.toLowerCase().includes("healthcare")) {
@@ -260,7 +316,7 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       }
       break;
-      
+
     case "document_search":
       if (query.toLowerCase().includes("non-compete")) {
         prompt += `
@@ -294,7 +350,7 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       }
       break;
-      
+
     case "contract_analysis":
       if (query.toLowerCase().includes("software licensing")) {
         prompt += `
@@ -336,7 +392,7 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       }
       break;
-      
+
     case "legal_advice":
       if (query.toLowerCase().includes("smith litigation")) {
         prompt += `
@@ -374,7 +430,7 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       }
       break;
-      
+
     case "unknown":
     default:
       prompt += `
@@ -384,14 +440,14 @@ Please note that the free tier is limited to ${config.maxQueriesPerDay} queries 
 `;
       break;
   }
-  
+
   // Add citation information for Claude
   prompt += `
 
 CITATION INFORMATION:
 When responding, please cite any documents or cases referenced using the SOURCE information provided.
 `;
-  
+
   return prompt;
 }
 
