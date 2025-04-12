@@ -13,9 +13,12 @@
     "setup": "bun run setup.ts",
     "check:clio": "bun run src/tools/check-clio.ts",
     "auth:simple": "bun run src/tools/simple-auth.ts",
+    "index:batch": "bun run src/tools/batch-index.ts",
+    "index:scheduled": "bun run src/tools/scheduled-index.ts",
     "test:auth": "bun run src/tests/test-auth.ts",
     "test:clio": "bun run src/tests/test-clio.ts",
     "test:extraction": "bun run src/tests/testTextExtraction.ts",
+    "test:indexing": "bun run src/tests/testBatchIndexing.ts",
     "digest": "bunx ai-digest"
   },
   "devDependencies": {
@@ -29,6 +32,7 @@
     "@modelcontextprotocol/sdk": "^1.9.0",
     "@xenova/transformers": "^2.17.2",
     "langchain": "^0.3.21",
+    "node-cron": "^3.0.3",
     "office-text-extractor": "^3.0.3",
     "zod": "^3.24.2"
   }
