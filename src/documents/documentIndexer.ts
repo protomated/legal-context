@@ -24,10 +24,10 @@ import { ProcessedDocument } from './documentProcessor';
 export interface IndexedChunk {
   id: string;           // Unique ID for the chunk (docId + index)
   text: string;         // The chunk text content
-  documentId: string;   // Source document ID
-  documentName: string; // Source document name
-  chunkIndex: number;   // Index of the chunk within the document
-  embedding: number[];  // Vector embedding of the chunk
+  doc_id: string;       // Source document ID
+  doc_uri: string;      // Source document URI/name
+  chunk_id: number;     // Index of the chunk within the document
+  vector: number[];     // Vector embedding of the chunk
   metadata: {
     contentType?: string;
     category?: string;
@@ -80,32 +80,47 @@ export class DocumentIndexer {
   }
 
   /**
+   * Close the database connection
+   */
+  public async close(): Promise<void> {
+    try {
+      const db = await this.dbPromise;
+      // LanceDB doesn't have an explicit close method, but we can set references to null
+      this.tablePromise = null;
+      this.initialized = false;
+      logger.info('LanceDB connection closed');
+    } catch (error) {
+      logger.error('Error closing LanceDB connection:', error);
+    }
+  }
+
+  /**
    * Initialize the document index
    */
   public async initialize(): Promise<boolean> {
     try {
       const db = await this.dbPromise;
 
-      // Check if the documents table exists
+      // Check if the vectors table exists
       const tables = await db.tableNames();
 
       // For testing purposes, drop the table if it exists to ensure schema compatibility
-      if (tables.includes('documents')) {
-        logger.info('Dropping existing documents table in LanceDB to ensure schema compatibility');
-        await db.dropTable('documents');
+      if (tables.includes('vectors')) {
+        logger.info('Dropping existing vectors table in LanceDB to ensure schema compatibility');
+        await db.dropTable('vectors');
       }
 
-      logger.info('Creating documents table in LanceDB with updated schema');
+      logger.info('Creating vectors table in LanceDB with updated schema');
 
       // Create the table with the schema
-      this.tablePromise = db.createTable('documents', [
+      this.tablePromise = db.createTable('vectors', [
         {
           id: 'chunk_1',
           text: 'Sample text for schema creation',
-          documentId: 'doc_1',
-          documentName: 'Sample Document',
-          chunkIndex: 0,
-          embedding: new Array(EMBEDDING_DIMENSION).fill(0),
+          doc_id: 'doc_1',
+          doc_uri: 'Sample Document',
+          chunk_id: 0,
+          vector: new Array(EMBEDDING_DIMENSION).fill(0),
           metadata: {
             contentType: 'text/plain',
             category: 'sample',
@@ -169,10 +184,10 @@ export class DocumentIndexer {
         const indexedChunk: IndexedChunk = {
           id: `${document.id}_${chunk.index}`,
           text: chunk.text,
-          documentId: document.id,
-          documentName: document.name,
-          chunkIndex: chunk.index,
-          embedding,
+          doc_id: document.id,
+          doc_uri: document.name,
+          chunk_id: chunk.index,
+          vector: embedding,
           metadata: document.metadata
         };
 
@@ -208,7 +223,7 @@ export class DocumentIndexer {
       const table = await this.tablePromise;
 
       // Delete all chunks for this document - use double quotes to ensure case sensitivity
-      await table.delete(`"documentId" = '${documentId}'`);
+      await table.delete(`"doc_id" = '${documentId}'`);
 
       logger.info(`Successfully removed document ${documentId} from index`);
       return true;
@@ -236,19 +251,29 @@ export class DocumentIndexer {
       const table = await this.tablePromise;
 
       try {
-        // Search for similar documents - using a more compatible approach
-        // First get all chunks from the table
-        const allChunks = await table.query().execute();
+        // Search for similar documents using vector similarity search
+        const searchResults = await table.search(queryEmbedding, 'vector')
+          .limit(limit)
+          .execute();
 
-        // For now, return empty results as we're focusing on the embedding generation
-        // In a production environment, we would implement proper vector similarity search
-        logger.debug(`Retrieved ${allChunks.length || 0} chunks from the database`);
+        // Handle the case where searchResults might not be an array
+        const resultsArray = Array.isArray(searchResults) ? searchResults :
+                            (searchResults && typeof searchResults === 'object' && searchResults.data ?
+                             searchResults.data : []);
 
-        // Return empty results for now - the important part is that embedding generation works
-        const searchResults: SearchResult[] = [];
+        logger.debug(`Retrieved ${resultsArray.length} results from the database`);
 
-        logger.info(`Found ${searchResults.length} results for query: ${query}`);
-        return searchResults;
+        // Map the results to our SearchResult interface
+        const mappedResults: SearchResult[] = resultsArray.map(result => ({
+          documentId: result.doc_id || '',
+          documentName: result.doc_uri || '',
+          text: result.text || '',
+          score: result._distance || 0, // LanceDB returns distance as _distance
+          metadata: result.metadata || {}
+        }));
+
+        logger.info(`Found ${mappedResults.length} results for query: ${query}`);
+        return mappedResults;
       } catch (searchError) {
         logger.warn(`Search operation failed, returning empty results: ${searchError}`);
         return [];
@@ -271,16 +296,33 @@ export class DocumentIndexer {
       // Get the table
       const table = await this.tablePromise;
 
-      // Count total chunks - handle potential undefined value
+      // Count total chunks
       const countResult = await table.countRows();
-      const chunkCount = countResult && countResult.count ? countResult.count : 0;
+      const chunkCount = typeof countResult === 'number' ? countResult :
+                         (countResult && countResult.count ? countResult.count : 0);
 
-      // For now, just return the chunk count as an estimate
-      // Due to LanceDB API changes, we'll simplify this for compatibility
-      const documentCount = 1; // Assuming at least one document if we have chunks
+      // Get unique document IDs to count documents
+      try {
+        const uniqueDocsQuery = await table.query().select(["doc_id"]).execute();
+        // Handle the case where uniqueDocsQuery might not be an array
+        const docsArray = Array.isArray(uniqueDocsQuery) ? uniqueDocsQuery :
+                         (uniqueDocsQuery && typeof uniqueDocsQuery === 'object' && uniqueDocsQuery.data ?
+                          uniqueDocsQuery.data : []);
 
-      logger.debug(`Index stats: estimated ${documentCount} documents, ${chunkCount} chunks`);
-      return { documentCount, chunkCount };
+        const uniqueDocIds = new Set();
+        docsArray.forEach(row => {
+          if (row && row.doc_id) {
+            uniqueDocIds.add(row.doc_id);
+          }
+        });
+
+        const documentCount = uniqueDocIds.size;
+        logger.debug(`Index stats: estimated ${documentCount} documents, ${chunkCount} chunks`);
+        return { documentCount, chunkCount };
+      } catch (queryError) {
+        logger.warn(`Error getting unique document IDs: ${queryError}`);
+        return { documentCount: 0, chunkCount };
+      }
     } catch (error) {
       logger.error('Error getting index stats:', error);
       return { documentCount: 0, chunkCount: 0 };

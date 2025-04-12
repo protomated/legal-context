@@ -50,5 +50,5 @@ test-files/*
 !test-files/README.md
 
 # DB
-lancedb/documents.lance/*
+lancedb/
 
