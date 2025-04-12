@@ -54,8 +54,62 @@ bun dev
 ### Connecting with Claude Desktop
 
 1. Open Claude Desktop
-2. Configure Claude to use LegalContext as an MCP server
-3. Start querying your legal documents!
+
+2. Configure Claude to use LegalContext as an MCP server:
+   - Locate the Claude Desktop configuration file:
+     - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+     - On Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+   - Create or edit the file with the following structure:
+     ```json
+     {
+       "mcpServers": {
+         "legalcontext": {
+           "command": "/path/to/bun",
+           "args": ["/path/to/legal-context/src/server.ts"],
+           "cwd": "/path/to/legal-context"
+         }
+       }
+     }
+     ```
+
+   - Replace `/path/to/bun` with the actual path to your Bun executable:
+     - Find it using `which bun` on macOS/Linux
+     - Typically located at `~/.bun/bin/bun` on macOS or `/usr/local/bin/bun`
+
+   - Replace `/path/to/legal-context` with the absolute path to your cloned repository
+
+   - Note: Do not edit the main `config.json` file, only the `claude_desktop_config.json` file
+
+3. Restart Claude Desktop to apply the configuration
+
+4. Start querying your legal documents!
+
+### Example Queries
+
+Once you have LegalContext set up and connected to Claude Desktop, you can try these example queries:
+
+- **Document Summarization**:
+  - "Can you summarize the key points from our recent settlement agreement with Acme Corp?"
+  - "What are the main provisions in our latest employment contract template?"
+
+- **Legal Research**:
+  - "What precedents do we have for consumer data privacy cases in the healthcare sector?"
+  - "Find relevant cases in our repository related to intellectual property disputes."
+
+- **Document Search**:
+  - "Find documents related to non-compete agreements that we've drafted in the last year."
+  - "Show me all merger and acquisition contracts we have with technology companies."
+
+- **Contract Analysis**:
+  - "What are the common clauses we include in our software licensing agreements?"
+  - "Can you analyze the risks in the Johnson contract that was uploaded to Clio last week?"
+
+- **Legal Advice Preparation**:
+  - "Based on our previous cases, what arguments should we prepare for the upcoming Smith litigation?"
+  - "What documentation do we typically require from clients for trademark registration?"
+
+> **Note**: The current implementation is a placeholder that tracks query counts but returns generic responses. Full document retrieval and context-aware responses will be available in future updates.
 
 ## Development
 
