@@ -1,3 +1,6 @@
+// Path: /Users/deletosh/projects/legal-context/src/server.ts
+// Let's enhance the error handling and MCP server initialization
+
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -15,6 +18,7 @@ import { logger } from "./logger";
 import { registerTools } from "./tools";
 import { registerResources } from "./resources";
 import { initializeClioIntegration, shutdownClioIntegration } from "./clio";
+import { getDocumentIndexer } from "./documents/documentIndexer";
 
 // Explicitly load environment variables
 import { join } from "path";
@@ -57,7 +61,7 @@ async function startServer() {
   // Explicitly load .env variables first
   loadEnvFile();
 
-  // Display environment variables for debugging
+  // Display environment variables for debugging (redacting sensitive values)
   logger.debug('Loaded CLIO_CLIENT_ID:', process.env.CLIO_CLIENT_ID ? 'Present (not shown for security)' : 'Missing');
   logger.debug('Loaded CLIO_CLIENT_SECRET:', process.env.CLIO_CLIENT_SECRET ? 'Present (not shown for security)' : 'Missing');
   logger.debug('Loaded CLIO_REDIRECT_URI:', process.env.CLIO_REDIRECT_URI);
@@ -65,6 +69,17 @@ async function startServer() {
 
   logger.info(`Initializing LegalContext MCP server in ${config.nodeEnv} mode...`);
   logger.debug("Configuration loaded:", config);
+
+  // Initialize LanceDB connection first to ensure documents can be indexed
+  logger.info("Initializing document indexer...");
+  try {
+    const documentIndexer = getDocumentIndexer();
+    await documentIndexer.initialize();
+    logger.info("Document indexer initialized successfully");
+  } catch (error) {
+    logger.error("Failed to initialize document indexer:", error);
+    logger.warn("Continuing with server startup but document indexing capabilities will be limited");
+  }
 
   // Initialize Clio integration
   logger.info("Initializing Clio integration...");
@@ -87,6 +102,7 @@ async function startServer() {
   const server = new McpServer({
     name: "LegalContext", // Identifies the server to clients
     version: "0.1.0",     // MVP version
+    description: "Secure semantic search for legal document management that bridges Clio and Claude Desktop"
   });
 
   logger.info("LegalContext MCP server initialized successfully.");
@@ -117,11 +133,17 @@ async function startServer() {
 /**
  * Handle graceful shutdown of the server
  */
-function handleShutdown(server: McpServer) {
+async function handleShutdown(server: McpServer) {
   logger.info("Shutting down LegalContext MCP server...");
 
-  // Note: The McpServer class doesn't have a disconnect method
-  // We simply log the shutdown and exit gracefully
+  // Shutdown document indexer
+  try {
+    const documentIndexer = getDocumentIndexer();
+    await documentIndexer.close();
+    logger.info("Document indexer shutdown complete");
+  } catch (error) {
+    logger.error("Error shutting down document indexer:", error);
+  }
 
   // Shutdown Clio integration
   try {

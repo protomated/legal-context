@@ -1,3 +1,5 @@
+// Path: /Users/deletosh/projects/legal-context/src/clio/oauthClient.ts
+
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,7 +11,7 @@
  */
 /**
  * Clio OAuth 2.0 Client
- * 
+ *
  * This module implements the OAuth 2.0 client for authenticating with the Clio API.
  * It handles generating authorization URLs, exchanging authorization codes for tokens,
  * and refreshing expired tokens.
@@ -17,6 +19,7 @@
 
 import { config, validateClioConfig } from "../config";
 import { logger } from "../logger";
+import { randomBytes } from "crypto";
 
 // Define token response interface
 export interface ClioTokens {
@@ -34,14 +37,14 @@ export function getClioBaseUrl(): string {
   // Check if all required Clio config is available
   const requiredClioVars = ['clioClientId', 'clioClientSecret', 'clioRedirectUri', 'clioApiRegion'];
   const missingClioVars = requiredClioVars.filter(varName => !config[varName as keyof typeof config]);
-  
+
   if (missingClioVars.length > 0) {
     logger.warn(`Missing Clio configuration: ${missingClioVars.join(', ')}. Using default US region.`);
     return 'https://app.clio.com'; // Default to US region
   }
-  
+
   validateClioConfig(); // Ensure Clio config is valid
-  
+
   // Return region-specific URL
   switch (config.clioApiRegion) {
     case 'us':
@@ -58,31 +61,38 @@ export function getClioBaseUrl(): string {
 }
 
 /**
+ * Generate a cryptographically secure random state parameter for CSRF protection
+ */
+export function generateSecureState(): string {
+  return randomBytes(32).toString('hex');
+}
+
+/**
  * Generate the authorization URL for redirecting users to Clio's OAuth page
  */
 export function generateAuthorizationUrl(state: string): string {
   validateClioConfig(); // Ensure Clio config is valid
-  
+
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/authorize', baseUrl);
-  
+
   // Use the configured client ID and redirect URI from the environment
   const clientId = config.clioClientId;
   if (!clientId) {
     throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
   }
-  
+
   const redirectUri = config.clioRedirectUri;
   if (!redirectUri) {
     throw new Error('CLIO_REDIRECT_URI is not configured in environment variables');
   }
-  
+
   // Add required query parameters
   url.searchParams.append('response_type', 'code');
   url.searchParams.append('client_id', clientId);
   url.searchParams.append('redirect_uri', redirectUri);
   url.searchParams.append('state', state);
-  
+
   return url.toString();
 }
 
@@ -91,26 +101,26 @@ export function generateAuthorizationUrl(state: string): string {
  */
 export async function exchangeCodeForTokens(code: string): Promise<ClioTokens> {
   validateClioConfig(); // Ensure Clio config is valid
-  
+
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/token', baseUrl);
-  
+
   // Use the configured client ID, client secret, and redirect URI from the environment
   const clientId = config.clioClientId;
   if (!clientId) {
     throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
   }
-  
+
   const clientSecret = config.clioClientSecret;
   if (!clientSecret) {
     throw new Error('CLIO_CLIENT_SECRET is not configured in environment variables');
   }
-  
+
   const redirectUri = config.clioRedirectUri;
   if (!redirectUri) {
     throw new Error('CLIO_REDIRECT_URI is not configured in environment variables');
   }
-  
+
   // Create request body with all parameters
   const body = new URLSearchParams();
   body.append('grant_type', 'authorization_code');
@@ -118,11 +128,11 @@ export async function exchangeCodeForTokens(code: string): Promise<ClioTokens> {
   body.append('redirect_uri', redirectUri);
   body.append('client_id', clientId);
   body.append('client_secret', clientSecret);
-  
+
   // Log request details for debugging (redact sensitive info)
   logger.debug(`Token exchange URL: ${url.toString()}`);
   logger.debug(`Request body: grant_type=authorization_code, code=REDACTED, redirect_uri=${redirectUri}, client_id=${clientId}, client_secret=REDACTED`);
-  
+
   try {
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -132,20 +142,20 @@ export async function exchangeCodeForTokens(code: string): Promise<ClioTokens> {
       },
       body: body.toString()
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       logger.error(`Token exchange failed: ${response.status} ${response.statusText}`, errorText);
       throw new Error(`Failed to exchange code for tokens: ${response.status} ${response.statusText}`);
     }
-    
+
     const tokens = await response.json() as ClioTokens;
-    
+
     // Add created_at timestamp if not provided by the API
     if (!tokens.created_at) {
       tokens.created_at = Math.floor(Date.now() / 1000);
     }
-    
+
     return tokens;
   } catch (error) {
     logger.error("Error exchanging code for tokens:", error);
@@ -158,32 +168,32 @@ export async function exchangeCodeForTokens(code: string): Promise<ClioTokens> {
  */
 export async function refreshAccessToken(refreshToken: string): Promise<ClioTokens> {
   validateClioConfig(); // Ensure Clio config is valid
-  
+
   const baseUrl = getClioBaseUrl();
   const url = new URL('/oauth/token', baseUrl);
-  
+
   // Use the configured client ID and client secret from the environment
   const clientId = config.clioClientId;
   if (!clientId) {
     throw new Error('CLIO_CLIENT_ID is not configured in environment variables');
   }
-  
+
   const clientSecret = config.clioClientSecret;
   if (!clientSecret) {
     throw new Error('CLIO_CLIENT_SECRET is not configured in environment variables');
   }
-  
+
   // Create request body with all parameters
   const body = new URLSearchParams();
   body.append('grant_type', 'refresh_token');
   body.append('refresh_token', refreshToken);
   body.append('client_id', clientId);
   body.append('client_secret', clientSecret);
-  
+
   // Log request details for debugging (redact sensitive info)
   logger.debug(`Token refresh URL: ${url.toString()}`);
   logger.debug(`Request body: grant_type=refresh_token, refresh_token=REDACTED, client_id=${clientId}, client_secret=REDACTED`);
-  
+
   try {
     const response = await fetch(url.toString(), {
       method: 'POST',
@@ -193,20 +203,20 @@ export async function refreshAccessToken(refreshToken: string): Promise<ClioToke
       },
       body: body.toString()
     });
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       logger.error(`Token refresh failed: ${response.status} ${response.statusText}`, errorText);
       throw new Error(`Failed to refresh token: ${response.status} ${response.statusText}`);
     }
-    
+
     const tokens = await response.json() as ClioTokens;
-    
+
     // Add created_at timestamp if not provided by the API
     if (!tokens.created_at) {
       tokens.created_at = Math.floor(Date.now() / 1000);
     }
-    
+
     return tokens;
   } catch (error) {
     logger.error("Error refreshing access token:", error);
@@ -223,10 +233,10 @@ export function isTokenExpired(tokens: ClioTokens): boolean {
     // If we don't have created_at or expires_in, assume expired to be safe
     return true;
   }
-  
+
   const expirationTime = tokens.created_at + tokens.expires_in;
   const currentTime = Math.floor(Date.now() / 1000);
-  
+
   // Consider the token expired if it's within 60 seconds of expiration
   return currentTime >= (expirationTime - 60);
 }

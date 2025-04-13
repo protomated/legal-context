@@ -1,4 +1,4 @@
-// File: src/documents/documentIndexer.ts
+// Path: /Users/deletosh/projects/legal-context/src/documents/documentIndexer.ts
 
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
@@ -10,35 +10,44 @@
  * Website: protomated.com
  */
 /**
- * Document Indexing Module
+ * Enhanced Document Indexing Module
  *
  * This module handles the indexing of document chunks in LanceDB for semantic search.
- * It provides functionality for creating, updating, and searching the document index.
+ * It provides versioning, sophisticated chunk management, and enhanced metadata filtering.
  */
 
 import { connect } from '@lancedb/lancedb';
 import { logger } from '../logger';
 import { config } from '../config';
 import { TextChunk, chunkText } from './textChunker';
-import { generateEmbedding, generateQueryEmbedding, EMBEDDING_DIMENSION } from './embeddings';
+import { generateEmbedding, generateQueryEmbedding, EMBEDDING_DIMENSION, clearEmbeddingCache } from './embeddings';
 import { ProcessedDocument } from './documentProcessor';
+import crypto from 'crypto';
 
 /**
  * Interface for a document chunk with embedding
  */
 export interface IndexedChunk {
-  id: string;           // Unique ID for the chunk (docId + index)
-  text: string;         // The chunk text content
-  doc_id: string;       // Source document ID
-  doc_uri: string;      // Source document URI/name
-  chunk_id: number;     // Index of the chunk within the document
-  vector: number[];     // Vector embedding of the chunk
+  id: string;               // Unique ID for the chunk (docId + index)
+  text: string;             // The chunk text content
+  doc_id: string;           // Source document ID
+  doc_uri: string;          // Source document URI/name
+  chunk_id: number;         // Index of the chunk within the document
+  vector: number[];         // Vector embedding of the chunk
+  // Enhanced metadata for legal documents
   metadata: {
     contentType?: string;
     category?: string;
     created: string;
     updated: string;
-    size?: number;      // Added size field explicitly to schema
+    size?: number;
+    version: string;        // Document version hash
+    lastIndexed: string;    // When the chunk was last indexed
+    sectionTitle?: string;  // Section title if available
+    sectionNumber?: string; // Section number if available
+    isHeading?: boolean;    // Whether this chunk is a heading
+    citations?: string[];   // Legal citations found in the chunk
+    clauseType?: string;    // Type of legal clause if identifiable
     parentFolder?: {
       id?: string;
       name?: string;
@@ -59,12 +68,46 @@ export interface SearchResult {
     category?: string;
     created: string;
     updated: string;
-    size?: number;      // Added size field explicitly to schema
+    size?: number;
+    version?: string;
+    lastIndexed?: string;
+    sectionTitle?: string;
+    sectionNumber?: string;
+    isHeading?: boolean;
+    citations?: string[];
+    clauseType?: string;
     parentFolder?: {
       id?: string;
       name?: string;
     };
   };
+}
+
+/**
+ * Interface for metadata filter options
+ */
+export interface MetadataFilter {
+  contentType?: string | string[];
+  category?: string | string[];
+  dateRange?: {
+    start?: string;
+    end?: string;
+  };
+  clauseType?: string | string[];
+  isHeading?: boolean;
+  hasCitations?: boolean;
+  folderName?: string;
+  folderId?: string;
+}
+
+/**
+ * Interface for search options
+ */
+export interface SearchOptions {
+  limit?: number;           // Maximum number of results
+  filter?: MetadataFilter;  // Metadata filters
+  includeVersions?: boolean;// Whether to include multiple versions of the same document
+  minScore?: number;        // Minimum similarity score (0-1)
 }
 
 // Singleton instance of the document indexer
@@ -77,6 +120,7 @@ export class DocumentIndexer {
   private dbPromise: Promise<any>;
   private tablePromise: Promise<any> | null = null;
   private initialized = false;
+  private documentVersions: Map<string, string> = new Map();
 
   /**
    * Constructor initializes the LanceDB connection
@@ -84,6 +128,11 @@ export class DocumentIndexer {
   constructor() {
     logger.info(`Initializing LanceDB at ${config.lanceDbPath}`);
     this.dbPromise = connect(config.lanceDbPath);
+
+    // Initialize version tracking
+    this.loadDocumentVersions().catch(err => {
+      logger.warn('Failed to load document versions:', err);
+    });
   }
 
   /**
@@ -91,10 +140,17 @@ export class DocumentIndexer {
    */
   public async close(): Promise<void> {
     try {
-      const db = await this.dbPromise;
-      // LanceDB doesn't have an explicit close method, but we can set references to null
+      await this.dbPromise;
+
+      // Save document versions before closing
+      await this.saveDocumentVersions();
+
       this.tablePromise = null;
       this.initialized = false;
+
+      // Clear caches
+      clearEmbeddingCache();
+
       logger.info('LanceDB connection closed');
     } catch (error) {
       logger.error('Error closing LanceDB connection:', error);
@@ -111,18 +167,55 @@ export class DocumentIndexer {
       // Check if the vector table exists
       const tables = await db.tableNames();
 
-      // Always recreate the table to ensure schema compatibility
-      if (tables.includes('vectors')) {
-        logger.info('Dropping existing vectors table in LanceDB to ensure schema compatibility');
-        await db.dropTable('vectors');
+      // Check for version tracking table
+      if (!tables.includes('document_versions')) {
+        logger.info('Creating document versions table in LanceDB');
+
+        // Sample version entry for schema definition
+        const sampleVersion = {
+          doc_id: 'sample_doc',
+          version: 'sample_version',
+          last_updated: new Date().toISOString(),
+        };
+
+        await db.createTable('document_versions', [sampleVersion]);
+        logger.info('Document versions table created');
+      } else {
+        // Load existing document versions
+        await this.loadDocumentVersions();
       }
 
-      // Create a new table with the schema
-      logger.info('Creating new vectors table in LanceDB with schema');
+      // Main vectors table with enhanced schema
+      if (tables.includes('vectors')) {
+        // Check if we need to migrate the schema for existing table
+        try {
+          const table = await db.openTable('vectors');
+          const schema = await table.schema();
 
-      // Sample document for schema definition
-      // Updated to include all fields that will be used in actual documents
-      const sampleChunk = {
+          // Check if our schema has changed and needs migration
+          const needsMigration = !schema.fieldNames.includes('metadata.version') ||
+            !schema.fieldNames.includes('metadata.lastIndexed');
+
+          if (needsMigration) {
+            logger.info('Schema change detected. Creating new vectors table with updated schema');
+            await db.dropTable('vectors');
+          } else {
+            logger.info('Using existing vectors table with compatible schema');
+            this.tablePromise = Promise.resolve(table);
+            this.initialized = true;
+            return true;
+          }
+        } catch (schemaError) {
+          logger.error('Error checking schema, recreating table:', schemaError);
+          await db.dropTable('vectors');
+        }
+      }
+
+      // Create a new table with the enhanced schema
+      logger.info('Creating new vectors table in LanceDB with enhanced schema');
+
+      // Sample document for schema definition with enhanced metadata
+      const sampleChunk: IndexedChunk = {
         id: 'sample_chunk',
         text: 'This is a sample text for schema creation',
         doc_id: 'sample_doc',
@@ -134,7 +227,17 @@ export class DocumentIndexer {
           category: 'sample',
           created: new Date().toISOString(),
           updated: new Date().toISOString(),
-          size: 0,  // Added size field to schema
+          size: 0,
+          version: 'v1',
+          lastIndexed: new Date().toISOString(),
+          sectionTitle: 'Sample Section',
+          sectionNumber: '1.0',
+          isHeading: false,
+          citations: ['Sample v. Citation, 123 F.3d 456 (2023)'],
+          clauseType: 'sample',
+          // Path: /Users/deletosh/projects/legal-context/src/documents/documentIndexer.ts
+// (continuing from where we left off)
+
           parentFolder: {
             id: 'folder-1',
             name: 'Sample Folder',
@@ -187,15 +290,135 @@ export class DocumentIndexer {
   }
 
   /**
-   * Index a processed document by chunking it and storing embeddings
+   * Load document versions from the database
    */
-  public async indexDocument(document: ProcessedDocument): Promise<boolean> {
+  private async loadDocumentVersions(): Promise<void> {
+    try {
+      const db = await this.dbPromise;
+
+      if (!(await db.tableNames()).includes('document_versions')) {
+        return;
+      }
+
+      const versionsTable = await db.openTable('document_versions');
+      const versions = await versionsTable.query().execute();
+
+      // Reset version map
+      this.documentVersions = new Map();
+
+      // Load versions into memory
+      for (const row of versions) {
+        if (row.doc_id && row.version) {
+          this.documentVersions.set(row.doc_id, row.version);
+        }
+      }
+
+      logger.info(`Loaded ${this.documentVersions.size} document versions`);
+    } catch (error) {
+      logger.error('Error loading document versions:', error);
+    }
+  }
+
+  /**
+   * Save document versions to the database
+   */
+  private async saveDocumentVersions(): Promise<void> {
+    try {
+      if (this.documentVersions.size === 0) {
+        return;
+      }
+
+      const db = await this.dbPromise;
+
+      // Create table if it doesn't exist
+      if (!(await db.tableNames()).includes('document_versions')) {
+        logger.warn('Versions table not found, creating it');
+        return;
+      }
+
+      const versionsTable = await db.openTable('document_versions');
+
+      // Prepare version data
+      const versions = Array.from(this.documentVersions.entries()).map(([doc_id, version]) => ({
+        doc_id,
+        version,
+        last_updated: new Date().toISOString(),
+      }));
+
+      // Delete existing versions
+      for (const [doc_id] of this.documentVersions.entries()) {
+        await versionsTable.delete(`doc_id = '${doc_id}'`);
+      }
+
+      // Add new versions
+      await versionsTable.add(versions);
+
+      logger.info(`Saved ${versions.length} document versions`);
+    } catch (error) {
+      logger.error('Error saving document versions:', error);
+    }
+  }
+
+  /**
+   * Generate a version hash for a document
+   * This is used to detect changes in the document content
+   */
+  private generateDocumentVersion(document: ProcessedDocument): string {
+    // Create a hash of the document text and metadata
+    const hash = crypto.createHash('md5');
+    hash.update(document.text);
+    hash.update(document.name);
+    hash.update(document.metadata.updated);
+
+    if (document.metadata.contentType) {
+      hash.update(document.metadata.contentType);
+    }
+
+    if (document.metadata.category) {
+      hash.update(document.metadata.category);
+    }
+
+    // Return the hash as a version string
+    return `v${hash.digest('hex').substring(0, 8)}`;
+  }
+
+  /**
+   * Check if a document has changed by comparing version hashes
+   */
+  private hasDocumentChanged(documentId: string, newVersion: string): boolean {
+    const existingVersion = this.documentVersions.get(documentId);
+
+    // If we don't have a version, assume the document has changed
+    if (!existingVersion) {
+      return true;
+    }
+
+    // Compare versions
+    return existingVersion !== newVersion;
+  }
+
+  /**
+   * Index a processed document by chunking it and storing embeddings
+   * Now with versioning and change detection
+   */
+  public async indexDocument(document: ProcessedDocument, forceReindex: boolean = false): Promise<boolean> {
     if (!this.initialized) {
       await this.initialize();
     }
 
     try {
       logger.info(`Indexing document: ${document.id} - ${document.name}`);
+
+      // Generate version hash for the document
+      const version = this.generateDocumentVersion(document);
+
+      // Check if the document has changed since last indexing
+      if (!forceReindex && !this.hasDocumentChanged(document.id, version)) {
+        logger.info(`Document ${document.id} hasn't changed since last indexing (version: ${version}). Skipping.`);
+        return true;
+      }
+
+      logger.info(`Document ${document.id} has changed or force reindex requested. Indexing with version: ${version}`);
 
       // Chunk the document text (now async)
       const chunks = await chunkText(document.text, document.id, document.name);
@@ -210,12 +433,13 @@ export class DocumentIndexer {
 
       // Process each chunk
       const indexedChunks: IndexedChunk[] = [];
+      const now = new Date().toISOString();
 
       for (const chunk of chunks) {
         // Generate embedding for the chunk
-        const embedding = await generateEmbedding(chunk.text);
+        const embedding = await generateEmbedding(chunk);
 
-        // Create indexed chunk
+        // Create indexed chunk with enhanced metadata
         const indexedChunk: IndexedChunk = {
           id: `${document.id}_${chunk.index}`,
           text: chunk.text,
@@ -228,7 +452,14 @@ export class DocumentIndexer {
             category: document.metadata.category,
             created: document.metadata.created,
             updated: document.metadata.updated,
-            size: document.metadata.size,  // Make sure this is included in the schema
+            size: document.metadata.size,
+            version: version,
+            lastIndexed: now,
+            sectionTitle: chunk.sectionTitle,
+            sectionNumber: chunk.sectionNumber,
+            isHeading: chunk.isHeading,
+            citations: chunk.citations,
+            clauseType: chunk.clauseType,
             parentFolder: {
               id: document.metadata.parentFolder?.id,
               name: document.metadata.parentFolder?.name,
@@ -245,7 +476,11 @@ export class DocumentIndexer {
       // Add the new chunks to the index
       await table.add(indexedChunks);
 
-      logger.info(`Successfully indexed document ${document.id} with ${chunks.length} chunks`);
+      // Update version tracking
+      this.documentVersions.set(document.id, version);
+      await this.saveDocumentVersions();
+
+      logger.info(`Successfully indexed document ${document.id} with ${chunks.length} chunks (version: ${version})`);
       return true;
     } catch (error) {
       logger.error(`Error indexing document ${document.id}:`, error);
@@ -270,6 +505,10 @@ export class DocumentIndexer {
       // Delete all chunks for this document - use double quotes to ensure case sensitivity
       await table.delete(`"doc_id" = '${documentId}'`);
 
+      // Remove from version tracking
+      this.documentVersions.delete(documentId);
+      await this.saveDocumentVersions();
+
       logger.info(`Successfully removed document ${documentId} from index`);
       return true;
     } catch (error) {
@@ -279,32 +518,102 @@ export class DocumentIndexer {
   }
 
   /**
-   * Search the index for documents matching a query
-   *
-   * Performs a semantic vector search in LanceDB based on the user's query
-   * to retrieve relevant document chunks with their metadata.
-   *
-   * Implementation of Story 4.2: Semantic Search Implementation
-   * - Gets the query string
-   * - Generates a query embedding using Transformers.js
-   * - Accesses the initialized LanceDB table
-   * - Performs vector similarity search using table.search()
-   * - Retrieves top N results with text content and metadata
-   * - Handles scenarios with few or no results gracefully
+   * Build a WHERE clause for filtering based on metadata
    */
-  public async searchDocuments(query: string, limit: number = 5): Promise<SearchResult[]> {
+  private buildMetadataFilterClause(filter: MetadataFilter): string {
+    const conditions: string[] = [];
+
+    // Content type filter
+    if (filter.contentType) {
+      if (Array.isArray(filter.contentType)) {
+        const contentTypes = filter.contentType.map(t => `'${t}'`).join(', ');
+        conditions.push(`"metadata.contentType" IN (${contentTypes})`);
+      } else {
+        conditions.push(`"metadata.contentType" = '${filter.contentType}'`);
+      }
+    }
+
+    // Category filter
+    if (filter.category) {
+      if (Array.isArray(filter.category)) {
+        const categories = filter.category.map(c => `'${c}'`).join(', ');
+        conditions.push(`"metadata.category" IN (${categories})`);
+      } else {
+        conditions.push(`"metadata.category" = '${filter.category}'`);
+      }
+    }
+
+    // Date range filter
+    if (filter.dateRange) {
+      if (filter.dateRange.start) {
+        conditions.push(`"metadata.updated" >= '${filter.dateRange.start}'`);
+      }
+      if (filter.dateRange.end) {
+        conditions.push(`"metadata.updated" <= '${filter.dateRange.end}'`);
+      }
+    }
+
+    // Clause type filter
+    if (filter.clauseType) {
+      if (Array.isArray(filter.clauseType)) {
+        const clauseTypes = filter.clauseType.map(c => `'${c}'`).join(', ');
+        conditions.push(`"metadata.clauseType" IN (${clauseTypes})`);
+      } else {
+        conditions.push(`"metadata.clauseType" = '${filter.clauseType}'`);
+      }
+    }
+
+    // Heading filter
+    if (filter.isHeading !== undefined) {
+      conditions.push(`"metadata.isHeading" = ${filter.isHeading}`);
+    }
+
+    // Citations filter
+    if (filter.hasCitations !== undefined) {
+      if (filter.hasCitations) {
+        conditions.push(`"metadata.citations" IS NOT NULL`);
+      } else {
+        conditions.push(`"metadata.citations" IS NULL`);
+      }
+    }
+
+    // Folder filters
+    if (filter.folderName) {
+      conditions.push(`"metadata.parentFolder.name" = '${filter.folderName}'`);
+    }
+
+    if (filter.folderId) {
+      conditions.push(`"metadata.parentFolder.id" = '${filter.folderId}'`);
+    }
+
+    return conditions.length > 0 ? conditions.join(' AND ') : '';
+  }
+
+  /**
+   * Enhanced semantic search with metadata filtering and version control
+   */
+  public async searchDocuments(
+    query: string,
+    options: SearchOptions = {},
+  ): Promise<SearchResult[]> {
     if (!this.initialized) {
       await this.initialize();
     }
 
     try {
-      logger.info(`Performing semantic vector search with query: "${query}"`);
+      // Set default options
+      const limit = options.limit || 5;
+      const filter = options.filter || {};
+      const includeVersions = options.includeVersions || false;
+      const minScore = options.minScore || 0;
 
-      // Generate embedding for the query using Transformers.js (Story 3.3)
+      logger.info(`Performing semantic vector search: "${query}" with limit ${limit}`);
+
+      // Generate embedding for the query using Transformers.js
       const queryEmbedding = await generateQueryEmbedding(query);
       logger.debug(`Generated query embedding with dimension: ${queryEmbedding.length}`);
 
-      // Get the table (access the initialized LanceDB table)
+      // Get the table
       const table = await this.tablePromise;
 
       try {
@@ -313,7 +622,7 @@ export class DocumentIndexer {
         const rowCount = typeof countResult === 'number' ? countResult :
           (countResult && countResult.count ? countResult.count : 0);
 
-        logger.debug(`Table contains ${rowCount} total rows according to countRows()`);
+        logger.debug(`Table contains ${rowCount} total rows`);
 
         // Handle case where the table is empty
         if (rowCount === 0) {
@@ -321,12 +630,20 @@ export class DocumentIndexer {
           return [];
         }
 
-        // Perform vector similarity search using table.search()
-        logger.debug(`Performing vector similarity search with query embedding`);
+        // Start building the search query
+        let searchQuery = table.search(queryEmbedding, 'vector');
 
-        const searchResults = await table.search(queryEmbedding, 'vector')
-          .limit(limit)
-          .execute();
+        // Apply metadata filters if provided
+        const filterClause = this.buildMetadataFilterClause(filter);
+        if (filterClause) {
+          searchQuery = searchQuery.where(filterClause);
+        }
+
+        // Add limit
+        searchQuery = searchQuery.limit(limit * 2); // Get more results than needed for post-processing
+
+        // Execute the search
+        const searchResults = await searchQuery.execute();
 
         // Handle the case where searchResults might not be an array
         const resultsArray = Array.isArray(searchResults) ? searchResults :
@@ -335,23 +652,45 @@ export class DocumentIndexer {
 
         logger.debug(`Retrieved ${resultsArray.length} results from vector search`);
 
-        // Handle scenarios with few or no results gracefully
+        // No results
         if (resultsArray.length === 0) {
-          logger.info(`No documents found that semantically match the query: "${query}"`);
+          logger.info(`No documents found matching query: "${query}"`);
           return [];
-        } else if (resultsArray.length < 3) {
-          // If we have fewer than 3 results, log a message but still return them
-          logger.info(`Found only ${resultsArray.length} results for query: "${query}"`);
         }
 
-        // Map the results to our SearchResult interface to return text content and metadata
-        const mappedResults: SearchResult[] = resultsArray.map(result => ({
+        // Post-process results
+        let mappedResults: SearchResult[] = resultsArray.map(result => ({
           documentId: result.doc_id || '',
           documentName: result.doc_uri || '',
           text: result.text || '',
           score: result._distance || 0,
           metadata: result.metadata || {},
         }));
+
+        // Filter by minimum score
+        if (minScore > 0) {
+          mappedResults = mappedResults.filter(result => 1 - result.score >= minScore);
+        }
+
+        // Handle version deduplication if requested
+        if (!includeVersions) {
+          // Group by document ID and keep only the latest version
+          const latestVersions = new Map<string, SearchResult>();
+
+          for (const result of mappedResults) {
+            if (!latestVersions.has(result.documentId) ||
+              (result.metadata.lastIndexed && latestVersions.get(result.documentId)!.metadata.lastIndexed &&
+                result.metadata.lastIndexed > latestVersions.get(result.documentId)!.metadata.lastIndexed)) {
+              latestVersions.set(result.documentId, result);
+            }
+          }
+
+          mappedResults = Array.from(latestVersions.values());
+        }
+
+        // Sort by score and limit
+        mappedResults.sort((a, b) => a.score - b.score);
+        mappedResults = mappedResults.slice(0, limit);
 
         logger.info(`Found ${mappedResults.length} results for query: "${query}"`);
         return mappedResults;
@@ -371,7 +710,16 @@ export class DocumentIndexer {
   /**
    * Get statistics about the document index
    */
-  public async getIndexStats(): Promise<{ documentCount: number, chunkCount: number }> {
+  public async getIndexStats(): Promise<{
+    documentCount: number;
+    chunkCount: number;
+    versionsCount: number;
+    averageChunksPerDocument: number;
+    oldestDocumentDate?: string;
+    newestDocumentDate?: string;
+    categoryBreakdown?: Record<string, number>;
+    clauseTypeBreakdown?: Record<string, number>;
+  }> {
     if (!this.initialized) {
       await this.initialize();
     }
@@ -380,7 +728,7 @@ export class DocumentIndexer {
       // Get the table
       const table = await this.tablePromise;
 
-      // Get all chunks using query().execute() to match how we query in searchDocuments
+      // Get all chunks
       try {
         const allChunks = await table.query().execute();
 
@@ -398,27 +746,81 @@ export class DocumentIndexer {
 
         logger.debug(`getIndexStats: Table contains ${countRowsChunkCount} total chunks via countRows()`);
 
-        // If we have chunks, log a sample to debug
-        if (chunksArray.length > 0) {
-          logger.debug(`getIndexStats: Sample chunk: ${JSON.stringify(chunksArray[0], null, 2)}`);
-        }
+        // Skip the sample document used for schema creation
+        const filteredChunks = chunksArray.filter(row => row.doc_id !== 'sample_doc');
 
         // Get unique document IDs
-        const uniqueDocIds = new Set();
+        const uniqueDocIds = new Set<string>();
 
-        // Skip the sample document used for schema creation
-        chunksArray.forEach(row => {
-          if (row && row.doc_id && row.doc_id !== 'sample_doc') {
+        // Collect metadata for statistics
+        const categories = new Map<string, number>();
+        const clauseTypes = new Map<string, number>();
+        let oldestDate: string | undefined;
+        let newestDate: string | undefined;
+
+        // Process each chunk
+        for (const row of filteredChunks) {
+          if (row && row.doc_id) {
             uniqueDocIds.add(row.doc_id);
           }
+
+          // Collect category stats
+          if (row?.metadata?.category) {
+            categories.set(
+              row.metadata.category,
+              (categories.get(row.metadata.category) || 0) + 1,
+            );
+          }
+
+          // Collect clause type stats
+          if (row?.metadata?.clauseType) {
+            clauseTypes.set(
+              row.metadata.clauseType,
+              (clauseTypes.get(row.metadata.clauseType) || 0) + 1,
+            );
+          }
+
+          // Track document dates
+          if (row?.metadata?.updated) {
+            if (!oldestDate || row.metadata.updated < oldestDate) {
+              oldestDate = row.metadata.updated;
+            }
+
+            if (!newestDate || row.metadata.updated > newestDate) {
+              newestDate = row.metadata.updated;
+            }
+          }
+        }
+
+        // Calculate statistics
+        const documentCount = uniqueDocIds.size;
+        const chunkCount = filteredChunks.length;
+        const versionsCount = this.documentVersions.size;
+        const averageChunksPerDocument = documentCount > 0 ? chunkCount / documentCount : 0;
+
+        // Convert maps to records
+        const categoryBreakdown: Record<string, number> = {};
+        categories.forEach((count, category) => {
+          categoryBreakdown[category] = count;
         });
 
-        const documentCount = uniqueDocIds.size;
-        // For chunk count, don't count the sample document
-        const chunkCount = chunksArray.filter(row => row.doc_id !== 'sample_doc').length;
+        const clauseTypeBreakdown: Record<string, number> = {};
+        clauseTypes.forEach((count, clauseType) => {
+          clauseTypeBreakdown[clauseType] = count;
+        });
 
-        logger.debug(`Index stats: ${documentCount} documents, ${chunkCount} chunks via query, ${countRowsChunkCount} chunks via countRows`);
-        return { documentCount, chunkCount };
+        logger.debug(`Index stats: ${documentCount} documents, ${chunkCount} chunks, ${versionsCount} versions`);
+
+        return {
+          documentCount,
+          chunkCount,
+          versionsCount,
+          averageChunksPerDocument,
+          oldestDocumentDate: oldestDate,
+          newestDocumentDate: newestDate,
+          categoryBreakdown: Object.keys(categoryBreakdown).length > 0 ? categoryBreakdown : undefined,
+          clauseTypeBreakdown: Object.keys(clauseTypeBreakdown).length > 0 ? clauseTypeBreakdown : undefined,
+        };
       } catch (queryError) {
         logger.warn(`Error querying chunks: ${queryError}`);
 
@@ -429,18 +831,32 @@ export class DocumentIndexer {
             (countResult && countResult.count ? countResult.count : 0);
 
           logger.debug(`Index stats (fallback): 0 documents, ${chunkCount} chunks via countRows`);
-          return { documentCount: 0, chunkCount };
+          return {
+            documentCount: 0,
+            chunkCount,
+            versionsCount: this.documentVersions.size,
+            averageChunksPerDocument: 0,
+          };
         } catch (countError) {
           logger.warn(`Error counting rows: ${countError}`);
-          return { documentCount: 0, chunkCount: 0 };
+          return {
+            documentCount: 0,
+            chunkCount: 0,
+            versionsCount: this.documentVersions.size,
+            averageChunksPerDocument: 0,
+          };
         }
       }
     } catch (error) {
       logger.error('Error getting index stats:', error);
-      return { documentCount: 0, chunkCount: 0 };
+      return {
+        documentCount: 0,
+        chunkCount: 0,
+        versionsCount: 0,
+        averageChunksPerDocument: 0,
+      };
     }
   }
-
 }
 
 /**
