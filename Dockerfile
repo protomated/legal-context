@@ -13,10 +13,22 @@ COPY . .
 
 # Create a non-root user
 RUN adduser --disabled-password --gecos "" mcpuser
+
+# Build the project
+RUN bun run build
+
+# Switch to non-root user
 USER mcpuser
 
-# Expose any necessary ports (if your MCP uses HTTP)
-# EXPOSE 3001
+# Volume for persistent data
+VOLUME /app/data
+
+# Environment variables
+ENV NODE_ENV=production
+ENV LANCEDB_DB_PATH=/app/data/lancedb
+
+# Expose the OAuth port
+EXPOSE 3001
 
 # Command to run the MCP server
-ENTRYPOINT ["bun", "run", "src/server.ts"]
+ENTRYPOINT ["bun", "run", "dist/server.js"]
