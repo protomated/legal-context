@@ -1,86 +1,98 @@
-# LegalContext
-## Secure AI document context for law firms
+# LegalContext: Secure Semantic Search for Legal Document Management
 
-[![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](https://github.com/protomated/legal-context/blob/main/LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/protomated/legal-context/releases)
+## Executive Summary
 
-## Table of Contents
+The practice of law faces a critical inflection point at the intersection of artificial intelligence and legal work. While AI promises unprecedented efficiency gains, lawyers are rightfully skeptical about adopting tools that could compromise client confidentiality, generate hallucinations, or otherwise undermine their ethical obligations. These concerns are magnified when dealing with sensitive legal documents stored within practice management systems like Clio.
 
-1. [Overview](#overview)
-2. [The AI Hallucination Crisis in Legal Practice](#the-ai-hallucination-crisis-in-legal-practice)
-3. [How LegalContext Solves This Problem](#how-legal-context-solves-this-problem)
-4. [User Flow Diagram](#user-flow-diagram)
-5. [LegalContext vs. Alternative Solutions](#legal-context-vs-alternative-solutions)
-6. [Key Features](#key-features)
-7. [Technical Architecture](#technical-architecture)
-8. [Frequently Asked Questions](#frequently-asked-questions)
-9. [Getting Started](#getting-started)
-   - [Prerequisites](#prerequisites)
-   - [Installation](#installation)
-   - [Free Tier Limitations](#free-tier-limitations)
-10. [Licensing Tiers and Pricing](#licensing-tiers-and-pricing)
-    - [Free Open Source](#free-open-source)
-    - [Professional](#professional)
-    - [Enterprise](#enterprise)
-    - [Additional Services](#additional-services)
-11. [For Collaborators](#for-collaborators)
-    - [Development Setup](#development-setup)
-    - [Project Structure](#project-structure)
-    - [Testing](#testing)
-    - [Deployment](#deployment)
-12. [Contributing](#contributing)
-13. [License](#license)
-14. [Support](#support)
+LegalContext offers a revolutionary solution to these challenges by providing a secure, local-first bridge between your document management system and AI assistants like Claude. By creating a protected pathway for semantic search through your legal documents without exposing confidential information to third-party servers, LegalContext helps you:
 
-## Overview
+1. **Find critical information faster** - Semantic search goes beyond keyword matching to understand concepts and meaning, dramatically reducing time spent searching for specific clauses, precedents, or facts
+2. **Maintain complete data privacy** - All document indexing and processing happens locally within your firm's security perimeter; no document content is transmitted to external AI servers
+3. **Prevent AI hallucinations** - Responses are grounded in your firm's actual documents, eliminating fictitious case law or invented facts
+4. **Establish clear citation trails** - Every AI response includes citations to specific documents, ensuring verifiable, traceable information
 
-LegalContext is an open-source Model Context Protocol (MCP) server that creates a secure, standardized bridge between law firms' document management systems (specifically Clio) and AI assistants (starting with Claude Desktop). It enables AI tools to access, retrieve, and incorporate firm document context while maintaining complete security and control over sensitive information.
+In an environment where judges are increasingly imposing sanctions for AI hallucinations and where protecting client confidentiality is paramount, LegalContext provides a path to leverage AI's power while maintaining full adherence to legal ethics and professional responsibility.
 
-**Key Value Proposition**: Transform AI from a liability risk into a trusted legal assistant by ensuring all AI responses are grounded in your firm's actual documents and expertise.
+## The Crisis of Information Retrieval in Legal Practice
 
-## The AI Hallucination Crisis in Legal Practice
+### The High Cost of Finding Information
 
-AI hallucinations pose a critical risk in legal settings, as evidenced by several high-profile cases:
+Law firms face a persistent and costly challenge: the sheer amount of time wasted searching for information. Studies indicate lawyers can spend up to 2.5 hours daily just searching for information, with approximately 4.3 hours per week lost specifically to unsuccessful searches or recreating documents they couldn't find. This inefficiency directly impacts profitability, potentially costing firms between $66,000 to $97,500 per lawyer annually in lost billable hours.
 
-- A recent Stanford study found that even the latest legal AI tools hallucinate in 1 out of 6 (or more) queries, despite using Retrieval Augmented Generation (RAG). While some legal tech companies claim their tools are "hallucination-free," Stanford researchers found that LexisNexis and Thomson Reuters AI tools each hallucinate between 17% and 33% of the time. [Source: [Stanford HAI](https://hai.stanford.edu/news/ai-trial-legal-models-hallucinate-1-out-6-or-more-benchmarking-queries), [Stanford Law School](https://law.stanford.edu/publications/hallucination-free-assessing-the-reliability-of-leading-ai-legal-research-tools/)]
+The problem is particularly acute within document management systems like Clio, where users report significant frustrations with search functionality:
 
-- Federal judges have imposed serious sanctions on attorneys for relying on AI hallucinations. In one Manhattan case, two New York lawyers were fined $5,000 for submitting fictional cases generated by ChatGPT. A Texas lawyer was ordered to pay a $2,000 penalty and attend AI education courses after citing nonexistent cases and fabricated quotations. [Source: [Reuters](https://www.reuters.com/technology/artificial-intelligence/ai-hallucinations-court-papers-spell-trouble-lawyers-2025-02-18/), [Bloomberg Law](https://news.bloomberglaw.com/litigation/lawyer-sanctioned-over-ai-hallucinated-case-cites-quotations)]
+- Search matching works strictly from left-to-right, causing failures when searching for partial terms
+- Arbitrary limits on search results (e.g., caps of 200 documents) that can hide relevant files
+- Inability to see folder structures or paths for documents in search results
+- Cumbersome workflows requiring manual filtering after initial search
 
-- Lawyers at Morgan & Morgan, one of the nation's largest personal injury firms, faced sanctions when their internal AI platform "hallucinated" fake cases. The judge fined the primary attorney $3,000 and revoked his temporary admission to practice. [Source: [ABA Journal](https://www.abajournal.com/news/article/no-42-law-firm-by-headcount-could-face-sanctions-over-fake-case-citations-generated-by-chatgpt), [Clio Blog](https://www.clio.com/blog/ai-hallucination-case/)]
+These limitations create a perfect storm where lawyers waste billable hours navigating an inefficient system, leading to increased frustration, delayed case preparation, and a higher risk of missing critical information.
 
-- These incidents led Morgan & Morgan to send an urgent email to its more than 1,000 lawyers warning that "Artificial intelligence can invent fake case law, and using made-up information in a court filing could get you fired." [Source: [Reuters](https://www.reuters.com/technology/artificial-intelligence/ai-hallucinations-court-papers-spell-trouble-lawyers-2025-02-18/)]
+### The Limitations of Traditional Search
 
-- As Judge Marcia Crone noted, "The duties imposed by Rule 11 require that attorneys read, and thereby confirm the existence and validity of, the legal authorities on which they rely." Multiple courts have emphasized that AI use does not excuse attorneys from their professional responsibility to verify sources. [Source: [Baker Botts](https://www.bakerbotts.com/thought-leadership/publications/2024/december/trust-but-verify-avoiding-the-perils-of-ai-hallucinations-in-court)]
+Traditional keyword-based search suffers from fundamental limitations when applied to legal document repositories:
 
-## How LegalContext Solves This Problem
+1. **Synonym blindness** - Different documents may use varied terminology to discuss the same concept (e.g., "compensation" vs. "remuneration")
+2. **Context insensitivity** - Keyword search cannot understand the meaning or importance of terms in different contexts
+3. **Conceptual gaps** - Legal arguments often involve abstract concepts not captured by literal terms
+4. **Information overload** - Too many results requiring manual review and filtering
 
-LegalContext addresses the hallucination crisis through a fundamentally different approach to AI document integration:
+These limitations force lawyers to spend hours manually reviewing documents that may or may not contain the information they need—hours that could otherwise be spent on high-value legal work.
 
-### 1. Firm-Specific Document Grounding
+### The Document Review Bottleneck
 
-Unlike generic RAG systems or public legal databases, LegalContext:
-- Connects directly to your firm's Clio document management system
-- Makes your firm's proprietary knowledge and precedents available to Claude
-- Ensures AI responses are based on your actual documents, not imagined cases
-- Creates an institutional memory accessible to all your attorneys
+Document review represents one of the most significant bottlenecks in legal workflows. The sheer volume of data, particularly Electronically Stored Information (ESI), has grown exponentially, overwhelming traditional review methods. Document review often accounts for 70-80% of total litigation costs, consuming vast amounts of attorney time while still being susceptible to human error, fatigue, and reviewer bias.
 
-### 2. Secure Local Processing
+The consequences of ineffective document review can be severe: court sanctions, adverse rulings, or the inability to build a strong case due to missed information. As the volume and complexity of legal documentation continue to grow, this bottleneck threatens to become even more constricting.
 
-All document processing occurs completely within your firm's security perimeter:
-- Zero document content transmitted to external servers
-- No sensitive data exposed to third parties
-- Complies with client confidentiality requirements
-- Maintains Clio's existing security model and permissions
+## The AI Revolution: Promise and Peril
 
-### 3. Citation Tracking & Verification
+Artificial Intelligence, particularly large language models (LLMs) like Claude, offers tremendous potential to transform legal work. However, skepticism among legal professionals is well-founded and centers around several key concerns:
 
-Every statement generated by the AI is transparently linked to its source:
-- Automatic citation of specific firm documents
-- Clear attribution to enable verification
-- Prevention of unsourced claims
-- Audit trail for AI-generated content
+### 1. AI Hallucinations: A Documented Liability
 
-## User Flow Diagram
+AI "hallucinations"—the generation of fabricated information—pose a serious professional risk. Recent cases highlight the danger:
+
+- In 2023, a federal judge in Manhattan fined two New York lawyers $5,000 for citing cases that were invented by AI in a personal injury case
+- A Texas lawyer was ordered to pay a $2,000 penalty and attend AI education courses after citing nonexistent cases
+- Morgan & Morgan, one of the nation's largest personal injury firms, issued an urgent email to over 1,000 lawyers warning that using AI-generated fake case law could result in termination
+
+A Stanford study found that even leading AI tools from major legal providers hallucinate in 1 out of 6 queries, demonstrating that this is not a problem limited to general-purpose AI systems—it affects specialized legal AI as well.
+
+### 2. Client Confidentiality and Attorney-Client Privilege Risks
+
+Using AI tools can potentially compromise attorney-client privilege and violate ethical duties of confidentiality:
+
+- Most public AI systems retain user inputs for model training and improvement
+- Many AI providers reserve the right to share data with third-party vendors
+- Information shared with public AI tools may not maintain the confidentiality required to preserve attorney-client privilege
+- ABA Model Rule 1.6 requires lawyers to make "reasonable efforts to prevent inadvertent or unauthorized disclosure" of client information
+
+The legal consequences of unauthorized disclosure can be severe, potentially waiving privilege and exposing clients to legal risks.
+
+### 3. Data Security Concerns
+
+Law firms manage highly sensitive client information that requires rigorous protection:
+
+- Standard cloud-based AI solutions transmit document content to external servers
+- Third-party AI providers may have access to confidential information
+- Data may be stored, analyzed, or used for model training
+- The exact security measures protecting this information are often opaque
+
+When judges are now requiring lawyers to disclose AI use and certify that no confidential information has been disclosed to unauthorized parties, these security concerns become even more pressing.
+
+## LegalContext: A Secure Bridge to AI-Enhanced Legal Work
+
+LegalContext provides a fundamentally different approach to integrating AI with legal document management. Unlike conventional solutions that require uploading documents to cloud services, LegalContext creates a secure, local-first pipeline that maintains data privacy while unlocking powerful AI capabilities.
+
+### Core Architecture and Security Model
+
+LegalContext's architecture is built around a crucial distinction: **index locally, query securely**. This approach:
+
+1. **Keeps documents within your security perimeter** - Documents never leave your network; only the text of your specific queries and the minimal context needed for responses are transmitted
+2. **Processes document content locally** - Text extraction, chunking, and vector embedding generation all happen on your local machine
+3. **Maintains a secure local index** - Document vectors and metadata are stored in a local LanceDB database, never transmitted to external servers
+4. **Provides a controlled interface** - The Model Context Protocol (MCP) establishes a standardized, secure method for Claude to access only the specific information needed
 
 ```mermaid
 sequenceDiagram
@@ -89,7 +101,7 @@ sequenceDiagram
     participant LCServer as LegalContext
     participant Clio as Clio Document System
     
-    %% Everyday Usage Flow
+    %% Daily Usage Flow
     rect rgb(240, 255, 245)
         Note over Attorney,Clio: Typical Workflow
         
@@ -104,73 +116,72 @@ sequenceDiagram
     end
 ```
 
-## LegalContext vs. Alternative Solutions
+This architecture fundamentally addresses privacy and security concerns by ensuring:
 
-| Feature | LegalContext                           | Generic RAG Systems | Legal Research AI | General Purpose AI |
-|---------|----------------------------------------|---------------------|-------------------|-------------------|
-| **Knowledge Source** | 🟢 Firm-specific documents & expertise | 🟡 Generic knowledge bases | 🟡 Public legal databases | 🔴 General training data |
-| **Data Processing** | 🟢 100% local processing               | 🔴 Cloud processing | 🔴 Cloud processing | 🔴 Cloud processing |
-| **Document Integration** | 🟢 Native Clio integration             | 🔴 No DMS integration | 🔴 Research tool focus | 🔴 No document integration |
-| **Hallucination Prevention** | 🟢 Firm knowledge + citation tracking  | 🟡 Limited context | 🟡 Generic citations | 🔴 High hallucination risk |
-| **Workflow Integration** | 🟢 Seamless with Claude Desktop        | 🟡 Requires workflow changes | 🔴 Standalone product | 🟡 Generic capabilities |
-| **Security & Compliance** | 🟢 Zero data exposure                  | 🔴 External data processing | 🔴 External data processing | 🔴 External data processing |
+- **No bulk document upload** - Unlike other AI solutions, your entire document corpus is never transmitted
+- **Minimized data exposure** - Only the specific chunks relevant to a query are used to ground Claude's responses
+- **Complete local control** - You decide which documents to index, and the index remains on your machine
+- **Clear data boundaries** - The system establishes explicit gates between your documents and the AI
 
-🟢 = Excellent &nbsp;&nbsp; 🟡 = Moderate &nbsp;&nbsp; 🔴 = Poor/None
+### Key Features and Benefits
 
-### Why LegalContext Is Different
+#### 1. Semantic Search Through Vector Embeddings
 
-While many solutions claim to solve the AI hallucination problem, they fall short in key ways:
+LegalContext goes beyond traditional keyword search by using vector embeddings to capture the meaning and context of your documents:
 
-1. **Superior to Existing RAG Systems**
-   - A June 2024 Stanford study found that even leading RAG-based legal AI tools from LexisNexis and Thomson Reuters hallucinate 17-33% of the time
-   - Generic RAG systems rely on text similarity rather than legal relevance
-   - LegalContext grounds AI responses in your firm's actual knowledge, not public databases
+- Documents are split into semantically meaningful chunks
+- These chunks are converted into vector embeddings using Transformers.js with the MiniLM-L6-v2 model locally
+- Searches match based on semantic similarity rather than exact keyword matches
+- Results include contextually relevant information even when using different terminology
 
-2. **Better Than Clio Duo**
-   - Complements rather than competes with Clio's native AI
-   - Provides integration with Claude's advanced capabilities
-   - Allows flexibility in AI assistant choice
-   - Works with your existing document management system
+This approach directly addresses the limitations of Clio's native search, enabling you to find information based on concepts rather than specific words.
 
-3. **More Secure Than Cloud Solutions**
-   - No sensitive data transmitted outside your firm
-   - Complete control over document access
-   - Maintains existing security permissions
-   - Protects client confidentiality
+#### 2. Retrieval-Augmented Generation (RAG)
 
-## Key Features
+The system implements the RAG approach to provide accurate, grounded responses:
 
-### 🔒 Secure Document Integration
-- Creates a protected pathway for Claude to access documents stored in Clio
-- All document processing happens locally within your firm's network
-- Zero sensitive data exposed outside your security perimeter
+- Your natural language query is converted to a vector embedding
+- The system retrieves the most relevant document chunks from your local index
+- These chunks provide context for Claude's response
+- Claude generates answers based on your specific documents rather than its general training data
+- Every response includes citations to the source documents
 
-### 📚 Contextual Retrieval
-- Intelligently surfaces relevant firm documents when attorneys ask legal questions
-- Ensures AI responses are grounded in the firm's actual knowledge and precedents
-- Enables access to document content across practice areas and matters
+This method dramatically reduces the risk of hallucinations by grounding all responses in your actual documents.
 
-### 📝 Citation Tracking
-- Automatically adds proper citations to AI outputs
-- Links each statement to specific firm documents for verification
-- Creates an audit trail for AI-generated content
+#### 3. Citation Tracking and Verification
 
-### ❌ Hallucination Prevention
-- Dramatically reduces AI "hallucinations" by grounding responses in actual firm documents
-- Prevents the generation of fictional case law, precedents, or legal principles
-- Increases reliability and trustworthiness of AI output
+LegalContext ensures that all information is traceable and verifiable:
 
-### 🧠 Knowledge Amplification
-- Makes the firm's collective expertise accessible to every attorney
-- Helps junior staff leverage institutional knowledge previously siloed across the organization
-- Extends the impact of expert attorneys throughout the firm
+- Each response identifies the specific documents used as sources
+- Citations include document names, IDs, and content snippets
+- You can easily verify information by checking the cited documents
+- This creates an audit trail showing exactly where information came from
 
-### 💼 Workflow Integration
-- Seamlessly integrates with existing attorney workflows
-- No new interfaces to learn
-- Maintains Clio security model and permissions
+This feature is crucial for legal work, where verifying sources and ensuring accuracy are paramount.
 
-## Technical Architecture
+#### 4. Local Installation and Security
+
+The system is designed with security as a foundational principle:
+
+- Runs entirely on your local machine
+- Uses secure OAuth to connect with Clio
+- Stores tokens securely with encryption
+- No document content is shared with third parties
+- Complies with ethical requirements for preserving client confidentiality
+
+By processing documents locally, LegalContext maintains security while still leveraging the power of AI.
+
+## Technical Implementation Details
+
+LegalContext is built using modern technologies optimized for performance and security:
+
+- **Bun Runtime** - A fast JavaScript runtime that provides superior performance for local processing
+- **TypeScript** - Strongly typed for reliability and maintainability
+- **Model Context Protocol (MCP)** - An open standard for securely connecting AI models with data sources
+- **LanceDB** - An embedded vector database optimized for similarity search
+- **Transformers.js** - Local embedding generation without sending data to external APIs
+
+The system operates through a series of well-defined components:
 
 ```mermaid
 graph TB
@@ -183,49 +194,43 @@ graph TB
         
         %% MCP Section
         subgraph MCP["LegalContext (MCP Server)"]
-            subgraph NestJS["NestJS Backend"]
-                Server["MCP Server"]
+            subgraph Server["Bun Runtime Server"]
+                MCPServer["MCP Server<br>(McpServer)"]
                 
-                subgraph Core["Core Components"]
-                    McpHandler["MCP Protocol Handler"]
-                    ResourceMgr["Resource Manager"]
-                    ToolMgr["Tool Manager"]
-                    PromptMgr["Prompt Manager"]
-                    SecurityMgr["Security Manager"]
+                subgraph Components["Key Components"]
+                    Resources["Resource Handlers<br>(Legal Documents, Case Law)"]
+                    Tools["Tool Handlers<br>(Search, Analysis, RAG)"]
+                    DocumentProcessor["Document Processor<br>(Text Extraction, Chunking)"]
                 end
                 
-                subgraph Services["Business Services"]
-                    DocService["Document Service"]
-                    MatterService["Matter Service"]
-                    SearchService["Search Service"]
-                    AnalyticsService["Analytics Service"]
+                subgraph VectorDB["Vector Database"]
+                    LanceDB["LanceDB<br>(Embedded Vector Store)"]
+                    Embeddings["Embeddings Generator<br>(Transformers.js)"]
+                    IndexManager["Document Indexer"]
                 end
                 
-                subgraph Integration["Integration Layer"]
-                    ClioIntegration["Clio Integration"]
+                subgraph Integration["Clio Integration"]
+                    ClioAPI["Clio API Client"]
                     OAuthHandler["OAuth 2.0 Handler"]
-                    TokenStore["Secure Token Store"]
+                    TokenStore["Secure Token Storage"]
                 end
             end
-            
-            DB[(SQLite Database)]
-            Cache["Document Cache"]
-            Logs["Access & Audit Logs"]
         end
         
         %% Clio Section
         Clio["Clio<br>Document Management"]
         
         %% Flow between components
-        Claude <--> |"MCP Protocol<br>(stdio)"| Server
-        Server <--> Core
-        Core <--> Services
-        Services <--> Integration
+        Claude <--> |"MCP Protocol<br>(stdio)"| MCPServer
+        MCPServer --- Components
+        Components --- VectorDB
+        Components --- Integration
         Integration <--> |"REST API<br>OAuth 2.0"| Clio
         
-        NestJS <--> DB
-        NestJS <--> Cache
-        NestJS <--> Logs
+        %% Data flow
+        VectorDB --- IndexManager
+        IndexManager --- DocumentProcessor
+        DocumentProcessor --- ClioAPI
     end
     
     %% Apply styles to elements
@@ -233,451 +238,149 @@ graph TB
     class MCP secureZone
 ```
 
-## Frequently Asked Questions
+### Document Processing Pipeline
 
-### Privacy & Security
+1. **Document Retrieval** - Securely retrieves documents from Clio using OAuth authentication
+2. **Text Extraction** - Extracts plain text from various document formats using local processing
+3. **Chunking** - Splits documents into semantic chunks preserving meaningful context
+4. **Embedding Generation** - Creates vector embeddings locally using Transformers.js
+5. **Vector Indexing** - Stores embeddings in LanceDB for efficient similarity search
+6. **Query Processing** - Converts natural language queries to vector embeddings for search
+7. **Context Construction** - Assembles relevant document chunks into context for Claude
+8. **Response Generation** - Claude generates responses grounded in the provided context
 
-#### Does LegalContext send my documents to external services?
-No. All document processing happens 100% locally within your firm's network. LegalContext creates a secure bridge between Clio and Claude Desktop that keeps your documents within your security perimeter at all times. Your document content never leaves your firm's environment or gets transmitted to external servers. [Source: [TechTarget](https://www.techtarget.com/searchenterpriseai/news/366616516/Anthropics-new-standard-raises-AI-privacy-other-concerns)]
+This pipeline ensures that sensitive document content remains local while still enabling powerful semantic search and AI-assisted analysis.
 
-#### Does Claude use my document data for training?
-No. Anthropic (Claude's creator) has a clear policy stating: "We will not use your Inputs or Outputs to train our models" by default. The only exceptions are if: (1) your conversations are flagged for Trust & Safety review, or (2) you explicitly opt-in by submitting feedback. [Source: [Anthropic Privacy Center](https://privacy.anthropic.com/en/articles/10023555-how-do-you-use-personal-data-in-model-training)]
+## Addressing Objections: Security, Ethics, and Practicality
 
-#### Who can view my conversations with Claude?
-By default, Anthropic employees cannot access your conversations. Limited access is provided only when: (1) you explicitly consent to share data through feedback, or (2) review is needed to enforce their Usage Policy. Even then, only designated Trust & Safety team members may access this data on a need-to-know basis. [Source: [Anthropic Help Center](https://support.anthropic.com/en/articles/8325621-i-would-like-to-input-sensitive-data-into-free-claude-ai-or-claude-pro-who-can-view-my-conversations)]
+### Objection: "AI Can't Be Trusted in Legal Work"
 
-#### How is my data protected?
-Anthropic implements multiple security measures: (1) Data is encrypted both in transit and at rest, (2) Access controls limit who can view your data, (3) Regular security monitoring and vulnerability checks are performed, and (4) Employee access follows the principle of least privilege. [Source: [Anthropic Privacy Center](https://privacy.anthropic.com/en/articles/10458704-how-does-anthropic-protect-the-personal-data-of-claude-ai-users)]
+This concern is valid but addresses the wrong application of AI. LegalContext doesn't ask Claude to make legal judgments or provide legal advice. Instead, it leverages Claude for what AI does best—processing natural language queries and finding relevant information in a large corpus of documents. The system ensures all responses are grounded in your actual legal documents, not in Claude's general knowledge.
 
-#### How long is my data retained?
-For LegalContext, which implements the Model Context Protocol (MCP), your data is handled according to your firm's policies. For all Anthropic products, they automatically delete inputs and outputs on the backend within 30 days of receipt or generation, unless otherwise agreed. [Source: [Anthropic Privacy Center](https://privacy.anthropic.com/en/articles/10023548-how-long-do-you-store-personal-data)]
+More importantly, LegalContext provides clear citations for every piece of information, allowing you to verify sources and maintain accountability. This is fundamentally different from using general-purpose AI to generate legal content.
 
-### Technical Questions
+### Objection: "This Will Compromise Client Confidentiality"
 
-#### How does LegalContext work with MCP?
-LegalContext is built on Anthropic's Model Context Protocol (MCP), an open standard that enables secure two-way connections between data sources and AI tools. MCP handles both local resources (your Clio documents) and ensures Claude can access them through a standardized interface. [Source: [VentureBeat](https://venturebeat.com/data-infrastructure/anthropic-releases-model-context-protocol-to-standardize-ai-data-integration/)]
+LegalContext is specifically designed to protect confidentiality:
 
-#### Can I control which documents Claude can access?
-Yes. LegalContext respects Clio's existing security model and permissions. You can specify which document repositories Claude can access during setup, and the system maintains all access controls defined in Clio. You'll also be prompted for approval before Claude accesses any documents.
+- Document processing happens entirely locally
+- No document content is sent to external AI servers
+- Only the specific query and minimal necessary context are shared with Claude
+- No bulk upload of document content occurs
+- The system maintains a clear audit trail
 
-#### Do I need to install additional software?
-You'll need to install Claude Desktop and LegalContext. During installation, LegalContext will automatically configure Claude Desktop to use it. No additional software is required beyond the prerequisites listed in the installation section.
+This approach is aligned with the ABA Model Rules of Professional Conduct, which require "reasonable efforts" to prevent unauthorized disclosure of client information. By keeping document processing local, LegalContext provides stronger confidentiality protection than cloud-based alternatives.
 
-#### Can I use LegalContext with other document management systems?
-The current version supports Clio. We're working on integrations with additional document management systems for future releases. If you're interested in a specific integration, please contact us at team@protomated.com.
+### Objection: "Setting This Up Is Too Complicated"
 
-#### Is LegalContext compatible with my operating system?
-LegalContext is compatible with Windows 10 or later and macOS 12 or later. It requires Claude Desktop, which is available for the same operating systems.
+While LegalContext does require installation and setup, we've streamlined this process:
 
-### Troubleshooting
+- Comprehensive installation scripts
+- Step-by-step setup guides
+- Automated OAuth configuration
+- Clear documentation for each step
 
-#### What should I do if Claude can't access my documents?
-1. Verify that LegalContext is properly configured and running
-2. Check that your Clio account has the necessary API permissions
-3. Confirm that you've completed the OAuth authorization flow
-4. Ensure the document repositories are properly selected
-5. Restart Claude Desktop if necessary
+The initial setup investment quickly pays dividends through significant time savings in daily search and retrieval tasks. Moreover, the open-source nature of the project means the installation process will continue to improve through community contributions.
 
-#### How do I update LegalContext?
-LegalContext includes an auto-update feature that checks for new versions. You can also manually check for updates through the application menu. Updates are downloaded and installed automatically.
+### Objection: "The Free Tier Is Too Limited"
 
-#### Who do I contact for support?
-For technical support, please visit our documentation at https://help.protomated.com/legalcontext or submit an issue on our GitHub repository. For professional support, contact us at team@protomated.com.
+The free tier (100 documents, 50 queries/day) is designed as a starting point to demonstrate value. For many small firms and solo practitioners, this capacity is sufficient for core matters. As your needs grow, premium tiers remove these limitations while maintaining the same security model and feature set.
 
-## Getting Started
+The key advantage is that you can verify the value proposition with zero financial risk before committing to a paid plan.
 
-### Prerequisites
-- Windows 10+ or macOS 12+ 
-- Claude Desktop application installed
-- Clio account with appropriate API permissions
-- Node.js 16 or higher
+## Case Studies: LegalContext in Action
 
-### Installation
+### Case Study 1: Solo Practitioner Specializing in Contract Law
 
-1. Download the latest release from the [releases page](https://github.com/protomated/legal-context/releases)
+*Note: The following are hypothetical examples based on typical use cases*
 
-2. Run the installer and follow the setup wizard
+**Challenge:** Sarah, a solo practitioner, struggled to quickly locate specific clauses and provisions across numerous client contracts stored in Clio. Using standard search, she often spent 30-45 minutes finding relevant precedents for new contracts.
 
-3. Launch LegalContext and configure your Clio connection:
-   - Enter your Clio organization ID
-   - Complete the OAuth authorization flow
-   - Select document repositories to make available
+**Solution:** After installing LegalContext, Sarah indexed her 75 most frequently referenced contracts. When drafting new agreements, she can now ask Claude through LegalContext questions like "Show me our standard force majeure clauses for software licensing agreements in California" and instantly receive relevant examples with citations to specific documents.
 
-4. Configure Claude Desktop to use LegalContext:
-   - During installation, LegalContext will automatically configure Claude Desktop
-   - You'll be prompted to restart Claude Desktop to apply the changes
-   - After restarting, LegalContext will guide you through a test process to verify connectivity
+**Result:** Sarah estimates she saves 5-7 hours weekly on contract research and drafting, allowing her to take on more clients without sacrificing quality or work-life balance.
 
-5. Restart Claude Desktop and verify connection:
-   - Look for the tools icon in the Claude interface
-   - Try these sample prompts to test the connection:
-      - *"Can you summarize the key points from our recent settlement agreement with Acme Corp?"*
-      - *"What precedents do we have for consumer data privacy cases in the healthcare sector?"*
-      - *"Find documents related to non-compete agreements that we've drafted in the last year."*
-      - *"What are the common clauses we include in our software licensing agreements?"*
-      - *"Can you analyze the risks in the Johnson contract that was uploaded to Clio last week?"*
-   - You should see Claude requesting permission to access documents before responding
-   - Successful responses will include citations to specific documents in your Clio repository
+### Case Study 2: Small Litigation Firm
 
-### Free Tier Limitations
+**Challenge:** A five-attorney litigation firm specialized in employment cases was struggling to keep track of precedents and arguments across hundreds of case files in Clio. Associates were spending excessive time searching for relevant case strategies and previously successful arguments.
 
-The open-source version includes the following limitations:
+**Solution:** The firm deployed LegalContext to index their internal memos, briefs, and case notes. Through Claude Desktop, attorneys can now ask questions like "What arguments have we successfully used against non-compete clauses in the healthcare sector?" and receive comprehensive, cited answers drawn from the firm's own work product.
 
-- 100 documents maximum
-- 2 Claude Desktop users maximum
-- 50 queries per day
+**Result:** The firm reports reducing research time by approximately 40%, with the additional benefit of more consistent strategy application across cases. Junior associates benefit particularly from instant access to the firm's collective expertise.
+
+## Getting Started with LegalContext
+
+The open-source version of LegalContext can be installed and configured with minimal technical knowledge:
+
+1. **Installation** - Use the provided installation script or Docker container
+2. **Configuration** - Set up connection to your Clio account via OAuth
+3. **Document Selection** - Choose which documents to index (up to 100 in the free tier)
+4. **Claude Desktop Setup** - Configure Claude Desktop to use LegalContext
+5. **Start Searching** - Begin asking natural language questions about your documents
+
+Detailed installation instructions and configuration guides are available in the documentation and GitHub repository.
+
+## Free Tier vs. Professional Features
+
+LegalContext is available as both an open-source free tier and paid professional versions:
+
+### Free Tier (Open Source)
+
+- Up to 100 indexed documents
+- Maximum of 50 queries per day
+- Support for 2 Claude Desktop users
 - Single Clio repository
-- 3 concurrent requests maximum
-- Daily document indexing (not real-time)
+- Support via GitHub community
 
-To remove these limitations, check our [pricing page](https://protomated.com/legalcontext#pricing) for Professional and Enterprise options.
+### Professional Tier
 
-## Licensing Tiers and Pricing
+- Unlimited document indexing
+- Unlimited daily queries
+- Support for multiple users
+- Multi-repository support
+- Enhanced document analysis
+- Priority support
+- Advanced security features
 
-LegalContext is available in three licensing tiers to accommodate firms of all sizes and requirements.
+### Enterprise Tier
 
-### Free Open Source
+- Custom deployment options
+- Advanced analytics
+- Integration with additional document management systems
+- Dedicated support and training
+- Custom features and integrations
 
-Our community edition is ideal for small firms and solo practitioners:
+## Conclusion: The Future of Legal Document Intelligence
 
-- **Price**: Free
-- **Features**:
-  - Full document search and retrieval
-  - Secure local processing
-  - Citation tracking
-  - Basic document indexing
-- **Limitations**:
-  - 100 documents maximum
-  - 2 Claude Desktop users maximum
-  - 50 queries per day
-  - Single Clio repository
-  - 3 concurrent requests maximum
-  - Daily document indexing (not real-time)
-- **Support**: Community forum and GitHub issues
+The legal profession stands at a pivotal moment where AI technologies offer transformative potential while simultaneously presenting significant risks. LegalContext provides a bridge to this future—one that maintains the highest ethical standards while unlocking powerful new capabilities.
 
-### Professional
+By addressing the core challenges of document search and retrieval through a secure, local-first approach, LegalContext enables you to:
 
-For small to medium law firms requiring additional capacity and features:
+1. Reclaim hours of billable time previously lost to inefficient search
+2. Enhance the accuracy and thoroughness of your legal research
+3. Maintain complete control over sensitive client information
+4. Avoid the pitfalls of AI hallucinations in legal work
+5. Create a scalable knowledge management solution for your practice
 
-- **Price**: $99/month per user
-- **Features**:
-  - All Free tier features
-  - Unlimited documents
-  - Real-time document indexing
-  - Advanced security controls
-  - Enhanced document processing
-  - Multi-repository support
-  - Usage analytics and reporting
-- **Support**: 
-  - Email support with 48-hour response time
-  - Knowledge base access
-  - Quarterly security updates
+The result is not just improved efficiency, but a fundamental enhancement in how legal knowledge is accessed, utilized, and applied within your firm.
 
-### Enterprise
-
-Designed for medium to large firms with complex security and compliance needs:
-
-- **Price**: $199/month per user (volume discounts available)
-- **Features**:
-  - All Professional features
-  - Unlimited concurrent requests
-  - Advanced document analytics
-  - Custom integration capabilities
-  - On-premises deployment option
-  - High availability configuration
-  - Custom security policies
-  - Document utilization insights
-  - Priority feature development
-  - Custom branding
-- **Support**:
-  - Dedicated account manager
-  - Priority support with 4-hour response time
-  - Quarterly business reviews
-  - Custom training sessions
-  - 24/7 critical issue response
-
-### Additional Services
-
-Protomated offers complementary services to enhance your LegalContext deployment:
-
-#### Implementation Services
-
-- **Setup & Configuration**: $1,500 one-time fee
-  - Full environment setup
-  - Clio integration configuration
-  - Document repository optimization
-  - User training sessions (2 hours)
-  - Go-live support
-
-- **Custom Integration Development**: Starting at $5,000
-  - Integration with additional document management systems
-  - Custom workflow automation
-  - Data migration services
-  - Security assessment and hardening
-
-#### Ongoing Support Options
-
-- **Standard Support Plan**: Included with Professional tier
-  - Email support during business hours
-  - 48-hour response time
-  - Access to knowledge base
-
-- **Premium Support Plan**: $500/month
-  - Phone and email support
-  - 8-hour response time
-  - Monthly health checks
-  - Dedicated support contact
-
-- **Enterprise Support Plan**: Included with Enterprise tier
-  - 24/7 critical issue support
-  - 4-hour response time
-  - Quarterly system reviews
-  - Dedicated account manager
-
-#### Training and Documentation
-
-- **User Training**: $750 per session (up to 10 users)
-  - 2-hour live training
-  - Custom training materials
-  - Hands-on exercises
-  - Q&A session
-
-- **Admin Training**: $1,200 per session
-  - 4-hour technical training
-  - Advanced configuration
-  - Troubleshooting techniques
-  - Performance optimization
-
-For custom pricing or to discuss specific requirements, please contact our sales team at sales@protomated.com.
-
-## For Collaborators
-
-This section provides detailed information for developers and contributors who want to work on LegalContext.
-
-### Development Setup
-
-#### Prerequisites
-- Bun 1.0 or higher
-- PostgreSQL 15 with pgvector extension
-- Clio Developer account with API access
-- Claude Desktop for testing
-
-#### Local Development Environment
-
-1. **Clone the repository**
-
-```bash
-git clone https://github.com/protomated/legal-context.git
-cd legal-context
-```
-
-2. **Install dependencies**
-
-```bash
-bun install
-```
-
-3. **Set up environment variables**
-
-Create a `.env.local` file based on the `.env.example` template:
-
-```bash
-cp .env.example .env.local
-```
-
-Edit the `.env.local` file and fill in your Clio API credentials and other configuration values.
-
-4. **Set up the development database**
-
-```bash
-# If using Docker
-docker-compose up -d postgres-dev
-
-# Or manually create PostgreSQL database with pgvector
-# See docker/postgres/init-vector.sql for required schema setup
-```
-
-5. **Run the OAuth setup**
-
-```bash
-bun run setup
-```
-
-This will walk you through the Clio OAuth authorization flow to get valid access tokens.
-
-6. **Start the development server**
-
-```bash
-bun run start:dev
-```
-
-The server will be available at http://localhost:3000.
-
-7. **Configure Claude Desktop**
-
-Edit your Claude Desktop configuration to use the local MCP server:
-
-```json
-{
-  "mcpServers": {
-    "legalcontext": {
-      "command": "bun",
-      "args": ["run", "start:dev"],
-      "cwd": "/path/to/legal-context"
-    }
-  }
-}
-```
-
-### Project Structure
-
-The project follows a modular NestJS architecture:
-
-```
-legal-context/
-├── src/
-│   ├── main.ts                  # Application entry point
-│   ├── app.module.ts            # Root module
-│   ├── config/                  # Configuration handling
-│   ├── mcp/                     # MCP Server module
-│   │   ├── mcp.module.ts        
-│   │   ├── mcp-server.service.ts
-│   │   ├── resources/           # MCP resources implementation
-│   │   └── tools/               # MCP tools implementation
-│   ├── clio/                    # Clio Integration module
-│   │   ├── clio.module.ts       
-│   │   ├── auth/                # OAuth authentication
-│   │   ├── api/                 # Clio API client
-│   │   └── dto/                 # Data transfer objects
-│   ├── document-processing/     # Document Processing module
-│   │   ├── extractors/          # Text extraction services
-│   │   ├── chunking/            # Document chunking service
-│   │   ├── embedding/           # Vector embedding service
-│   │   └── indexing/            # Search and indexing services
-│   └── database/                # Database module
-│       └── entities/            # Database entities
-├── test/                        # Test directory
-│   ├── e2e/                     # End-to-end tests
-│   └── unit/                    # Unit tests
-├── docker/                      # Docker configuration
-└── scripts/                     # Utility scripts
-```
-
-### Testing
-
-The project includes several types of tests to ensure quality and reliability:
-
-#### Unit Tests
-
-Run unit tests to verify individual components:
-
-```bash
-# Run all unit tests
-bun run test
-
-# Run tests with coverage report
-bun run test:cov
-
-# Run tests in watch mode during development
-bun run test:watch
-```
-
-#### Integration Tests
-
-Test interaction between components:
-
-```bash
-# Run integration tests
-bun run test:integration
-```
-
-#### End-to-End Tests
-
-Test complete flows from Claude Desktop to Clio and back:
-
-```bash
-# Run e2e tests
-bun run test:e2e
-```
-
-#### Mock Clio API
-
-For development and testing, you can use the mock Clio API server:
-
-```bash
-# Start mock Clio API server
-bun run start:mock-clio
-```
-
-This provides a simulated Clio API environment with test documents and OAuth endpoints.
-
-### Deployment
-
-LegalContext supports multiple deployment options:
-
-#### Docker Deployment
-
-The simplest way to deploy is using Docker Compose:
-
-```bash
-# Build and start production containers
-docker-compose up -d legalcontext-prod
-```
-
-This will set up PostgreSQL with pgvector and the MCP server in production mode.
-
-#### Manual Deployment
-
-For on-premises deployment:
-
-1. **Build the production version**
-
-```bash
-bun run build
-```
-
-2. **Configure environment**
-
-Ensure all environment variables are set correctly for production.
-
-3. **Set up PostgreSQL**
-
-Install PostgreSQL with pgvector extension and run the initialization scripts.
-
-4. **Start the server**
-
-```bash
-NODE_ENV=production bun run start:prod
-```
-
-#### Scaling Considerations
-
-- For increased document capacity, consider upgrading to PostgreSQL with more CPU and RAM
-- For multiple users, ensure the server has sufficient concurrent connection capacity
-- Consider using a load balancer for high-availability deployments
-- Implement proper backup strategies for the PostgreSQL database
-
-#### Monitoring and Maintenance
-
-- Set up health checks to monitor the MCP server
-- Schedule regular backups of the PostgreSQL database
-- Implement log rotation for audit logs
-- Create an update strategy for security patches
-
-## Contributing
-
-We welcome contributions to LegalContext! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute.
-
-## License
-
-LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
-
-## Support
-
-- **Documentation**: [https://help.protomated.com/legalcontext](https://help.protomated.com/legalcontext)
-- **Community Forum & Issues**: [GitHub Issues](https://github.com/protomated/legal-context/issues)
-- **Professional Support**: [team@protomated.com](mailto:team@protomated.com)
+As AI continues to reshape the legal landscape, LegalContext ensures you can adopt these powerful tools responsibly—maintaining the highest standards of ethics and client service while embracing the productivity benefits of modern technology.
 
 ---
 
-© 2025 Protomated
+## References and Further Reading
+
+For more information about LegalContext and the technologies it uses:
+
+- GitHub Repository: [https://github.com/protomated/legal-context](https://github.com/protomated/legal-context)
+- Documentation: [https://help.protomated.com/legalcontext](https://help.protomated.com/legalcontext)
+- Model Context Protocol: [https://modelcontextprotocol.io](https://modelcontextprotocol.io)
+
+For information about AI hallucinations and legal ethics:
+
+- ABA Model Rules of Professional Conduct: [https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/](https://www.americanbar.org/groups/professional_responsibility/publications/model_rules_of_professional_conduct/)
+- Stanford HAI Report on Legal AI Hallucinations: [https://hai.stanford.edu/news/ai-trial-legal-models-hallucinate-1-out-6-or-more-benchmarking-queries](https://hai.stanford.edu/news/ai-trial-legal-models-hallucinate-1-out-6-or-more-benchmarking-queries)
+
+---
+
+*This white paper represents the current implementation of LegalContext as of April 2025. Features and capabilities may evolve as the project develops.*
