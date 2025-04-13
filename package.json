@@ -43,6 +43,11 @@
     "prepublishOnly": "bun build ./src/server.ts --outdir ./dist --target=node"
   },
   "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3",
     "@types/bun": "latest"
   },
   "peerDependencies": {
@@ -55,6 +60,7 @@
     "langchain": "^0.3.21",
     "node-cron": "^3.0.3",
     "office-text-extractor": "^3.0.3",
+    "semantic-release": "^24.2.3",
     "zod": "^3.24.2"
   }
 }

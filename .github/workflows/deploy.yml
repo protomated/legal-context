@@ -10,12 +10,17 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC for npm provenance
+      packages: write # for publishing packages
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -28,39 +33,45 @@ jobs:
       - name: Build project
         run: bun run build
 
+      # Add semantic-release step
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release
+
+      # Only run npm publish and Docker build if semantic-release created a new release
       - name: Setup Node.js for npm publish
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: actions/setup-node@v3
         with:
           node-version: '18.x'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Set up Docker Buildx
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: docker/setup-buildx-action@v2
 
       - name: Login to Docker Hub
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract version
-        id: version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
+      # Use semantic-release version for Docker tag
       - name: Build and push Docker image
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
           tags: |
-            protomated/legal-context:${{ steps.version.outputs.VERSION }}
+            protomated/legal-context:${{ steps.semantic-release.outputs.new_release_version }}
             protomated/legal-context:latest
