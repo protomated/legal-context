@@ -1,12 +1,32 @@
 {
-  "name": "legal-context",
+  "name": "@protomated/legal-context",
   "version": "0.1.0",
-  "description": "An open-source Model Context Protocol (MCP) server that creates a secure bridge between a law firm's Clio document management system and Claude Desktop AI assistant",
-  "module": "src/server.ts",
-  "main": "src/server.ts",
+  "description": "An open-source MCP server that connects Clio document management with Claude Desktop",
+  "main": "dist/server.js",
   "type": "module",
-  "private": true,
   "license": "MPL-2.0",
+  "bin": {
+    "legal-context": "./bin/legal-context.js"
+  },
+  "author": "Protomated <team@protomated.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/protomated/legal-context.git"
+  },
+  "files": [
+    "src",
+    "bin",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "claude",
+    "clio",
+    "legal",
+    "rag",
+    "model-context-protocol"
+  ],
   "scripts": {
     "start": "bun run src/server.ts",
     "dev": "bun --watch run src/server.ts",
@@ -19,7 +39,8 @@
     "test:clio": "bun run src/tests/test-clio.ts",
     "test:extraction": "bun run src/tests/testTextExtraction.ts",
     "test:indexing": "bun run src/tests/testBatchIndexing.ts",
-    "digest": "bunx ai-digest"
+    "digest": "bunx ai-digest",
+    "prepublishOnly": "bun build ./src/server.ts --outdir ./dist --target=node"
   },
   "devDependencies": {
     "@types/bun": "latest"
