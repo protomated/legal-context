@@ -4,7 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * Copyright (c) Protomated
- * Email: ask@protomated.com
+ * Email: team@protomated.com
  * Website: protomated.com
  */
 /**

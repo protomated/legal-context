@@ -264,7 +264,7 @@ Yes. LegalContext respects Clio's existing security model and permissions. You c
 You'll need to install Claude Desktop and LegalContext. During installation, LegalContext will automatically configure Claude Desktop to use it. No additional software is required beyond the prerequisites listed in the installation section.
 
 #### Can I use LegalContext with other document management systems?
-The current version supports Clio. We're working on integrations with additional document management systems for future releases. If you're interested in a specific integration, please contact us at ask@protomated.com.
+The current version supports Clio. We're working on integrations with additional document management systems for future releases. If you're interested in a specific integration, please contact us at team@protomated.com.
 
 #### Is LegalContext compatible with my operating system?
 LegalContext is compatible with Windows 10 or later and macOS 12 or later. It requires Claude Desktop, which is available for the same operating systems.
@@ -282,7 +282,7 @@ LegalContext is compatible with Windows 10 or later and macOS 12 or later. It re
 LegalContext includes an auto-update feature that checks for new versions. You can also manually check for updates through the application menu. Updates are downloaded and installed automatically.
 
 #### Who do I contact for support?
-For technical support, please visit our documentation at https://help.protomated.com/legalcontext or submit an issue on our GitHub repository. For professional support, contact us at ask@protomated.com.
+For technical support, please visit our documentation at https://help.protomated.com/legalcontext or submit an issue on our GitHub repository. For professional support, contact us at team@protomated.com.
 
 ## Getting Started
 
@@ -676,7 +676,7 @@ LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
 
 - **Documentation**: [https://help.protomated.com/legalcontext](https://help.protomated.com/legalcontext)
 - **Community Forum & Issues**: [GitHub Issues](https://github.com/protomated/legal-context/issues)
-- **Professional Support**: [ask@protomated.com](mailto:ask@protomated.com)
+- **Professional Support**: [team@protomated.com](mailto:team@protomated.com)
 
 ---
 
