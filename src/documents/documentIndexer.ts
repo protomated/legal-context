@@ -1,3 +1,5 @@
+// File: src/documents/documentIndexer.ts
+
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -36,9 +38,10 @@ export interface IndexedChunk {
     category?: string;
     created: string;
     updated: string;
+    size?: number;      // Added size field explicitly to schema
     parentFolder?: {
-      id: string;
-      name: string;
+      id?: string;
+      name?: string;
     };
   };
 }
@@ -56,9 +59,10 @@ export interface SearchResult {
     category?: string;
     created: string;
     updated: string;
+    size?: number;      // Added size field explicitly to schema
     parentFolder?: {
-      id: string;
-      name: string;
+      id?: string;
+      name?: string;
     };
   };
 }
@@ -104,7 +108,7 @@ export class DocumentIndexer {
     try {
       const db = await this.dbPromise;
 
-      // Check if the vectors table exists
+      // Check if the vector table exists
       const tables = await db.tableNames();
 
       // Always recreate the table to ensure schema compatibility
@@ -117,6 +121,7 @@ export class DocumentIndexer {
       logger.info('Creating new vectors table in LanceDB with schema');
 
       // Sample document for schema definition
+      // Updated to include all fields that will be used in actual documents
       const sampleChunk = {
         id: 'sample_chunk',
         text: 'This is a sample text for schema creation',
@@ -129,11 +134,12 @@ export class DocumentIndexer {
           category: 'sample',
           created: new Date().toISOString(),
           updated: new Date().toISOString(),
+          size: 0,  // Added size field to schema
           parentFolder: {
             id: 'folder-1',
-            name: 'Sample Folder'
-          }
-        }
+            name: 'Sample Folder',
+          },
+        },
       };
 
       this.tablePromise = db.createTable('vectors', [sampleChunk]);
@@ -144,7 +150,7 @@ export class DocumentIndexer {
       // Verify the table was created successfully
       const countResult = await table.countRows();
       const rowCount = typeof countResult === 'number' ? countResult :
-                      (countResult && countResult.count ? countResult.count : 0);
+        (countResult && countResult.count ? countResult.count : 0);
 
       logger.info(`Initialized table with ${rowCount} sample row(s)`);
 
@@ -152,8 +158,8 @@ export class DocumentIndexer {
       try {
         const queryResult = await table.query().execute();
         const resultArray = Array.isArray(queryResult) ? queryResult :
-                           (queryResult && typeof queryResult === 'object' && queryResult.data ?
-                            queryResult.data : []);
+          (queryResult && typeof queryResult === 'object' && queryResult.data ?
+            queryResult.data : []);
 
         logger.info(`Verified query access: retrieved ${resultArray.length} row(s)`);
 
@@ -217,7 +223,17 @@ export class DocumentIndexer {
           doc_uri: document.name,
           chunk_id: chunk.index,
           vector: embedding,
-          metadata: document.metadata
+          metadata: {
+            contentType: document.metadata.contentType,
+            category: document.metadata.category,
+            created: document.metadata.created,
+            updated: document.metadata.updated,
+            size: document.metadata.size,  // Make sure this is included in the schema
+            parentFolder: {
+              id: document.metadata.parentFolder?.id,
+              name: document.metadata.parentFolder?.name,
+            },
+          },
         };
 
         indexedChunks.push(indexedChunk);
@@ -295,7 +311,7 @@ export class DocumentIndexer {
         // Check if the table has any data
         const countResult = await table.countRows();
         const rowCount = typeof countResult === 'number' ? countResult :
-                        (countResult && countResult.count ? countResult.count : 0);
+          (countResult && countResult.count ? countResult.count : 0);
 
         logger.debug(`Table contains ${rowCount} total rows according to countRows()`);
 
@@ -314,8 +330,8 @@ export class DocumentIndexer {
 
         // Handle the case where searchResults might not be an array
         const resultsArray = Array.isArray(searchResults) ? searchResults :
-                            (searchResults && typeof searchResults === 'object' && searchResults.data ?
-                             searchResults.data : []);
+          (searchResults && typeof searchResults === 'object' && searchResults.data ?
+            searchResults.data : []);
 
         logger.debug(`Retrieved ${resultsArray.length} results from vector search`);
 
@@ -334,7 +350,7 @@ export class DocumentIndexer {
           documentName: result.doc_uri || '',
           text: result.text || '',
           score: result._distance || 0,
-          metadata: result.metadata || {}
+          metadata: result.metadata || {},
         }));
 
         logger.info(`Found ${mappedResults.length} results for query: "${query}"`);
@@ -370,15 +386,15 @@ export class DocumentIndexer {
 
         // Handle the case where allChunks might not be an array
         const chunksArray = Array.isArray(allChunks) ? allChunks :
-                           (allChunks && typeof allChunks === 'object' && allChunks.data ?
-                            allChunks.data : []);
+          (allChunks && typeof allChunks === 'object' && allChunks.data ?
+            allChunks.data : []);
 
         logger.debug(`getIndexStats: Table contains ${chunksArray.length} total chunks via query().execute()`);
 
         // Also try countRows() to compare
         const countResult = await table.countRows();
         const countRowsChunkCount = typeof countResult === 'number' ? countResult :
-                                   (countResult && countResult.count ? countResult.count : 0);
+          (countResult && countResult.count ? countResult.count : 0);
 
         logger.debug(`getIndexStats: Table contains ${countRowsChunkCount} total chunks via countRows()`);
 
@@ -389,14 +405,17 @@ export class DocumentIndexer {
 
         // Get unique document IDs
         const uniqueDocIds = new Set();
+
+        // Skip the sample document used for schema creation
         chunksArray.forEach(row => {
-          if (row && row.doc_id) {
+          if (row && row.doc_id && row.doc_id !== 'sample_doc') {
             uniqueDocIds.add(row.doc_id);
           }
         });
 
         const documentCount = uniqueDocIds.size;
-        const chunkCount = chunksArray.length;
+        // For chunk count, don't count the sample document
+        const chunkCount = chunksArray.filter(row => row.doc_id !== 'sample_doc').length;
 
         logger.debug(`Index stats: ${documentCount} documents, ${chunkCount} chunks via query, ${countRowsChunkCount} chunks via countRows`);
         return { documentCount, chunkCount };
@@ -407,7 +426,7 @@ export class DocumentIndexer {
         try {
           const countResult = await table.countRows();
           const chunkCount = typeof countResult === 'number' ? countResult :
-                           (countResult && countResult.count ? countResult.count : 0);
+            (countResult && countResult.count ? countResult.count : 0);
 
           logger.debug(`Index stats (fallback): 0 documents, ${chunkCount} chunks via countRows`);
           return { documentCount: 0, chunkCount };
@@ -421,6 +440,7 @@ export class DocumentIndexer {
       return { documentCount: 0, chunkCount: 0 };
     }
   }
+
 }
 
 /**

@@ -19,6 +19,7 @@ import { logger } from '../logger';
 import { getClioApiClient } from '../clio';
 import { processDocument } from './documentProcessor';
 import { getDocumentIndexer } from './documentIndexer';
+import { ClioDocument, getClioApiClient, isProcessableDocument } from '../clio';
 import { config } from '../config';
 
 // Maximum number of documents to process in a batch
@@ -56,7 +57,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     errors: [],
     startTime,
     endTime: new Date(),
-    durationMs: 0
+    durationMs: 0,
   };
 
   try {
@@ -65,7 +66,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
 
     // Check if Clio API client is initialized
     if (!await clioApiClient.initialize()) {
-      throw new Error("Clio API client not initialized. Authentication required.");
+      throw new Error('Clio API client not initialized. Authentication required.');
     }
 
     // Get the document indexer
@@ -73,7 +74,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
 
     // Initialize the document indexer if needed
     if (!documentIndexer.isInitialized()) {
-      logger.info("Initializing document indexer");
+      logger.info('Initializing document indexer');
       await documentIndexer.initialize();
     }
 
@@ -93,13 +94,28 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     const remainingCapacity = MAX_DOCUMENTS - currentDocumentCount;
     logger.info(`Remaining document capacity: ${remainingCapacity}`);
 
+// Retrieve documents from Clio (first page with remaining capacity)
     // Retrieve documents from Clio (first page with remaining capacity)
     logger.info(`Retrieving up to ${remainingCapacity} documents from Clio`);
     const documentsResponse = await clioApiClient.listDocuments(1, remainingCapacity);
-    const documents = documentsResponse.data;
+    const allDocuments = documentsResponse.data;
 
-    result.totalDocuments = documents.length;
-    logger.info(`Retrieved ${documents.length} documents from Clio`);
+// Log raw document data to help debug
+    logger.debug(`Retrieved ${allDocuments.length} raw documents from Clio`);
+    if (allDocuments.length > 0) {
+      logger.debug(`Sample document: ${JSON.stringify(allDocuments[0], null, 2)}`);
+    }
+
+// Filter out documents that are not processable
+    const documents = allDocuments.filter(doc => isProcessableDocument(doc));
+
+    result.totalDocuments = allDocuments.length;
+    const skippedDocuments = allDocuments.length - documents.length;
+    if (skippedDocuments > 0) {
+      logger.info(`Retrieved ${allDocuments.length} documents from Clio, filtered out ${skippedDocuments} non-processable documents`);
+    } else {
+      logger.info(`Retrieved ${documents.length} documents from Clio`);
+    }
 
     // Process each document
     for (const document of documents) {
@@ -113,24 +129,79 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
 
         logger.info(`Processing document ${result.processedDocuments + 1}/${documents.length}: ${document.id} - ${document.name}`);
 
-        // Process the document (download, extract text)
-        const processedDocument = await processDocument(document.id);
+        try {
+          // Process the document (download, extract text)
+          logger.debug(`Fetching and extracting content for document: ${document.id}`);
+          const processedDocument = await processDocument(document.id);
 
-        // Index the document (chunk, embed, store)
-        const indexed = await documentIndexer.indexDocument(processedDocument);
+          // Check if the document has content
+          if (!processedDocument.text || processedDocument.text.trim().length === 0) {
+            logger.warn(`Document ${document.id} has no text content to index`);
+            result.failedDocuments++;
+            result.errors.push({
+              documentId: document.id,
+              error: `Document has no text content to index: ${document.name}`,
+            });
+            result.processedDocuments++;
+            continue;
+          }
 
-        if (indexed) {
-          result.successfulDocuments++;
-          logger.info(`Successfully indexed document: ${document.id} - ${document.name}`);
-        } else {
+          // Log document content size
+          logger.debug(`Document ${document.id} has ${processedDocument.text.length} characters of text content`);
+
+          // Index the document (chunk, embed, store)
+          logger.debug(`Indexing document: ${document.id}`);
+          const indexed = await documentIndexer.indexDocument(processedDocument);
+
+          if (indexed) {
+            result.successfulDocuments++;
+            logger.info(`Successfully indexed document: ${document.id} - ${document.name}`);
+          } else {
+            result.failedDocuments++;
+            const errorMessage = `Failed to index document: ${document.id} - ${document.name}`;
+            result.errors.push({ documentId: document.id, error: errorMessage });
+            logger.error(errorMessage);
+          }
+        } catch (processingError) {
+          // Handle errors during document processing
           result.failedDocuments++;
-          const errorMessage = `Failed to index document: ${document.id} - ${document.name}`;
+
+          // Create a descriptive error message based on the error type
+          let errorMessage: string;
+
+          if (processingError instanceof Error) {
+            // If it's a standard error, use its message
+            errorMessage = `Error processing document ${document.id} (${document.name}): ${processingError.message}`;
+
+            // Add stack trace to debug log
+            logger.debug(`Stack trace for document ${document.id} error:`, processingError.stack);
+          } else {
+            // For other error types
+            errorMessage = `Error processing document ${document.id} (${document.name}): ${String(processingError)}`;
+          }
+
+          // Record the error in the results
           result.errors.push({ documentId: document.id, error: errorMessage });
           logger.error(errorMessage);
+
+          // Log document metadata for debugging
+          try {
+            logger.debug(`Document metadata: ${JSON.stringify({
+              id: document.id,
+              name: document.name,
+              content_type: document.content_type,
+              size: document.size,
+              created_at: document.created_at,
+              updated_at: document.updated_at,
+            })}`);
+          } catch (metadataError) {
+            logger.debug(`Could not log document metadata: ${String(metadataError)}`);
+          }
         }
-      } catch (error) {
+      } catch (outerError) {
+        // Handle errors in the outer loop (should be rare)
         result.failedDocuments++;
-        const errorMessage = `Error processing document ${document.id}: ${error instanceof Error ? error.message : String(error)}`;
+        const errorMessage = `Unexpected error while processing document batch: ${outerError instanceof Error ? outerError.message : String(outerError)}`;
         result.errors.push({ documentId: document.id, error: errorMessage });
         logger.error(errorMessage);
       }
@@ -138,12 +209,12 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
       result.processedDocuments++;
     }
 
-    // Get index statistics
-    const indexStats = await documentIndexer.getIndexStats();
-    logger.info(`Document index now contains ${indexStats.documentCount} documents with ${indexStats.chunkCount} chunks`);
+    // Get final index statistics
+    const finalIndexStats = await documentIndexer.getIndexStats();
+    logger.info(`Document index now contains ${finalIndexStats.documentCount} documents with ${finalIndexStats.chunkCount} chunks`);
 
     // Check if we've reached the document limit
-    if (indexStats.documentCount >= MAX_DOCUMENTS) {
+    if (finalIndexStats.documentCount >= MAX_DOCUMENTS) {
       logger.warn(`Document limit (${MAX_DOCUMENTS}) has been reached. No more documents will be indexed until some are removed.`);
     } else {
       logger.info(`Document capacity remaining: ${MAX_DOCUMENTS - indexStats.documentCount} of ${MAX_DOCUMENTS}`);
@@ -180,7 +251,11 @@ export async function runBatchIndexing(): Promise<string> {
     // Get current document count from the index
     const documentIndexer = getDocumentIndexer();
     const indexStats = await documentIndexer.getIndexStats();
-    const currentDocumentCount = indexStats.documentCount;
+
+    // Use the successful documents count from our result as a fallback
+    // if the database query doesn't return the correct count
+    const currentDocumentCount = indexStats.documentCount > 0 ?
+      indexStats.documentCount : result.successfulDocuments;
 
     // Format a summary for display/logging
     const summary = [
@@ -199,7 +274,7 @@ export async function runBatchIndexing(): Promise<string> {
       `  Current document count: ${currentDocumentCount}/${MAX_DOCUMENTS}`,
       `  Remaining capacity: ${Math.max(0, MAX_DOCUMENTS - currentDocumentCount)}`,
       `  Limit reached: ${currentDocumentCount >= MAX_DOCUMENTS ? 'Yes' : 'No'}`,
-      ``
+      ``,
     ];
 
     if (result.errors.length > 0) {
@@ -214,3 +289,4 @@ export async function runBatchIndexing(): Promise<string> {
     return `Failed to run batch indexing: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
+

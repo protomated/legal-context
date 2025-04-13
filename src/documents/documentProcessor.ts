@@ -1,3 +1,5 @@
+// File: src/documents/documentProcessor.ts
+
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -9,7 +11,7 @@
  */
 /**
  * Document Processor Module
- * 
+ *
  * This module combines the Clio API client with the text extractor to
  * download documents from Clio and extract their text content.
  * It handles document retrieval, content extraction, and caching.
@@ -33,8 +35,8 @@ export interface ProcessedDocument {
     created: string;
     updated: string;
     parentFolder?: {
-      id: string;
-      name: string;
+      id?: string;
+      name?: string;
     };
   };
 }
@@ -51,54 +53,69 @@ const documentCache: Map<string, ProcessedDocument> = new Map();
  */
 export async function processDocument(documentId: string): Promise<ProcessedDocument> {
   logger.info(`Processing document: ${documentId}`);
-  
+
   // Check cache first
   if (documentCache.has(documentId)) {
     logger.debug(`Document ${documentId} found in cache`);
     return documentCache.get(documentId)!;
   }
-  
+
   // Get the Clio API client
   const clioApiClient = getClioApiClient();
-  
+
   // Check if Clio API client is initialized
   if (!await clioApiClient.initialize()) {
-    throw new Error("Clio API client not initialized. Authentication required.");
+    throw new Error('Clio API client not initialized. Authentication required.');
   }
-  
+
   try {
     // Get document metadata
     logger.debug(`Retrieving metadata for document ${documentId}`);
     const documentData = await clioApiClient.getDocument(documentId);
     const document = documentData.data;
-    
+
+    // Add debug output to see raw document data
+    logger.debug(`Document metadata: ${JSON.stringify(document, null, 2)}`);
+
     // Download document content
     logger.debug(`Downloading content for document ${documentId}`);
     const documentBuffer = await clioApiClient.downloadDocument(documentId);
-    
+
+    // Log buffer size to help debug
+    logger.debug(`Downloaded document size: ${documentBuffer.length} bytes`);
+
     // Extract text from document
     logger.debug(`Extracting text from document ${documentId}`);
-    const text = await extractTextFromBuffer(documentBuffer, document.name);
-    
+    const text = await extractTextFromBuffer(documentBuffer, document.name || `Document ${document.id}`);
+
+    // Log text length to help debug
+    logger.debug(`Extracted text length: ${text.length} characters`);
+    if (text.length === 0) {
+      logger.warn(`No text could be extracted from document ${documentId}`);
+    }
+
     // Create processed document
     const processedDocument: ProcessedDocument = {
       id: document.id,
-      name: document.name,
+      name: document.name || `Document ${document.id}`,
       text,
       metadata: {
         contentType: document.content_type,
         category: document.category,
-        size: document.size,
+        size: document.size,  // Ensure size is explicitly mapped
         created: document.created_at,
         updated: document.updated_at,
-        parentFolder: document.parent_folder,
-      }
+        parentFolder: document.parent_folder ? {
+          id: document.parent_folder.id,
+          name: document.parent_folder.name,
+        } : undefined,
+      },
     };
-    
+
     // Cache the processed document
     documentCache.set(documentId, processedDocument);
-    
-    logger.info(`Successfully processed document ${documentId}: ${document.name}`);
+
+    logger.info(`Successfully processed document ${documentId}: ${processedDocument.name}`);
     return processedDocument;
   } catch (error) {
     logger.error(`Error processing document ${documentId}:`, error);
@@ -111,7 +128,7 @@ export async function processDocument(documentId: string): Promise<ProcessedDocu
  */
 export function clearDocumentCache(): void {
   documentCache.clear();
-  logger.info("Document cache cleared");
+  logger.info('Document cache cleared');
 }
 
 /**
@@ -119,15 +136,15 @@ export function clearDocumentCache(): void {
  */
 export function getDocumentCacheStats(): { count: number, size: number } {
   let totalSize = 0;
-  
+
   for (const doc of documentCache.values()) {
     totalSize += doc.text.length;
     totalSize += JSON.stringify(doc.metadata).length;
     totalSize += doc.id.length + doc.name.length;
   }
-  
+
   return {
     count: documentCache.size,
-    size: totalSize
+    size: totalSize,
   };
 }
