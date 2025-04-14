@@ -10,7 +10,8 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-
+.junie
+.clio_tokens
 # OS
 .DS_Store
 
@@ -43,3 +44,14 @@ lerna-debug.log*
 tmp/
 temp/
 codebase.md
+
+# Test files
+test-files/*
+!test-files/README.md
+
+# DB
+lancedb/
+*.lance
+
+# Explicitly include Bun lockfile
+!bun.lockb

@@ -1,268 +1,443 @@
-# LegalContext MCP Server
+# LegalContext
 
-LegalContext is an open-source Model Context Protocol (MCP) server that creates a secure bridge between law firms' document management systems (specifically Clio) and AI assistants (starting with Claude Desktop). It enables AI tools to access, retrieve, and incorporate firm document context while maintaining complete security and control over sensitive information.
+LegalContext is an open-source Model Context Protocol (MCP) server that creates a secure bridge between a law firm's Clio document management system and Claude Desktop AI assistant.
 
-## Project Status
+## Features
 
-⚠️ **Development Status**: This project is in active development. Core MCP functionality and Clio API integration are implemented, with document processing and additional features in progress.
+- **Secure Document Access**: Connects to Clio API to access legal documents while maintaining security
+- **Local Processing**: All document processing happens locally within the firm's infrastructure
+- **MCP Integration**: Implements the Model Context Protocol for seamless integration with Claude Desktop
+- **Vector Search**: Uses LanceDB for efficient document retrieval based on semantic similarity
+- **Free Tier Limitations**: Includes built-in limits for the free version (100 documents, 50 queries/day)
 
-## Core Functionality
+## About LegalContext
 
-The current implementation includes:
+LegalContext addresses a critical challenge in legal practice: efficiently finding and leveraging information within your document management system while maintaining the highest standards of data security and client confidentiality.
 
-- ✅ Basic MCP server with stdio transport
-- ✅ Resource and tool registration
-- ✅ Example resources and tools
-- ✅ Configuration management
-- ✅ Testing infrastructure
-- ✅ OAuth 2.0 authentication with Clio
-- ✅ Secure document API integration with Clio
-- ✅ Document access control and permissions
-- ✅ Document metadata extraction and normalization
+For a comprehensive overview of how LegalContext can transform your legal practice, solve search frustrations, and protect against AI hallucinations, please read our [detailed white paper](docs/about-legal-context.md).
 
-## Getting Started
+The white paper covers:
+- How LegalContext addresses the crisis of information retrieval in legal practice
+- Why traditional search methods fail for legal documents
+- How our local-first approach protects client confidentiality
+- Real-world use cases and implementation examples
+- Detailed technical architecture and security model
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [Automated Setup (Local)](#automated-setup-local)
+  - [macOS Setup](#macos-setup)
+  - [Windows Setup](#windows-setup)
+- [Docker Deployment (Firmwide)](#docker-deployment-firmwide)
+  - [Basic Docker Deployment](#basic-docker-deployment)
+  - [Advanced Firmwide Deployment](#advanced-firmwide-deployment)
+- [Clio Setup](#clio-setup)
+- [Usage](#usage)
+  - [Authenticating with Clio](#authenticating-with-clio)
+  - [Indexing Documents](#indexing-documents)
+  - [Using with Claude Desktop](#using-with-claude-desktop)
+- [Security Considerations](#security-considerations)
+- [Limitations (Free Tier)](#limitations-free-tier)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Prerequisites
+
+- **Bun**: Version 1.0 or later (JavaScript runtime and package manager)
+- **Clio**: A Clio account with API access and registered application credentials
+- **Claude Desktop**: Anthropic's Claude Desktop application
+- **Operating System**: macOS, Linux, or Windows with WSL
+
+## Automated Setup (Local)
+
+### macOS Setup
+
+1. **Install Bun**
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+   
+   After installation, you may need to close and reopen your terminal, or run:
+   ```bash
+   source ~/.bashrc  # if using bash
+   source ~/.zshrc   # if using zsh
+   ```
+
+2. **Clone the Repository**
+   ```bash
+   git clone https://github.com/yourusername/legalcontext-mcp-server.git
+   cd legalcontext-mcp-server
+   ```
+
+3. **Install Dependencies**
+   ```bash
+   bun install
+   ```
+
+4. **Configure Environment Variables**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit the `.env` file using your preferred text editor and set the required variables:
+   ```bash
+   nano .env  # or use any other text editor
+   ```
+   
+   Ensure you set the following variables:
+   - `CLIO_CLIENT_ID`: Your Clio application's Client ID
+   - `CLIO_CLIENT_SECRET`: Your Clio application's Client Secret
+   - `CLIO_REDIRECT_URI`: The callback URL registered in your Clio app settings
+   - `CLIO_API_REGION`: The region of your Clio account ('us', 'eu', 'ca', 'au')
+   - `LANCEDB_DB_PATH`: Local filesystem path to store the LanceDB database files (e.g., `./lancedb`)
+
+5. **Start the Server**
+   ```bash
+   bun run src/server.ts
+   ```
+
+6. **Configure Claude Desktop**
+   
+   Create or edit the Claude Desktop configuration file:
+   ```bash
+   nano ~/.config/Claude-Desktop/claude_desktop_config.json
+   ```
+   
+   Add LegalContext as an MCP server:
+   ```json
+   {
+     "mcpServers": [
+       {
+         "name": "LegalContext",
+         "command": "/Users/YOUR_USERNAME/.bun/bin/bun",
+         "args": ["/Users/YOUR_USERNAME/path/to/legalcontext-mcp-server/src/server.ts"]
+       }
+     ]
+   }
+   ```
+   
+   Replace `/Users/YOUR_USERNAME/` with your actual home directory path.
+   
+   Restart Claude Desktop for the changes to take effect.
+
+### Windows Setup
+
+1. **Install Bun**
+   
+   Install Windows Subsystem for Linux (WSL) if you haven't already:
+   ```
+   wsl --install
+   ```
+   
+   After WSL is installed, open a WSL terminal and install Bun:
+   ```bash
+   curl -fsSL https://bun.sh/install | bash
+   ```
+   
+   Close and reopen your WSL terminal, or run:
+   ```bash
+   source ~/.bashrc
+   ```
+
+2. **Clone the Repository**
+   ```bash
+   git clone https://github.com/yourusername/legalcontext-mcp-server.git
+   cd legalcontext-mcp-server
+   ```
+
+3. **Install Dependencies**
+   ```bash
+   bun install
+   ```
+
+4. **Configure Environment Variables**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit the `.env` file:
+   ```bash
+   nano .env
+   ```
+   
+   Configure the required variables as described in the macOS section.
+
+5. **Start the Server**
+   ```bash
+   bun run src/server.ts
+   ```
+
+6. **Configure Claude Desktop**
+   
+   Create or edit the Claude Desktop configuration file at this location:
+   ```
+   C:\Users\YOUR_USERNAME\AppData\Roaming\Claude-Desktop\claude_desktop_config.json
+   ```
+   
+   Add LegalContext as an MCP server:
+   ```json
+   {
+     "mcpServers": [
+       {
+         "name": "LegalContext",
+         "command": "wsl",
+         "args": ["~/.bun/bin/bun", "~/path/to/legalcontext-mcp-server/src/server.ts"]
+       }
+     ]
+   }
+   ```
+   
+   Replace `~/path/to/` with your actual WSL path to the project.
+   
+   Restart Claude Desktop for the changes to take effect.
+
+## Docker Deployment (Firmwide)
+
+LegalContext can be deployed using Docker for a more standardized, firmwide setup. This approach simplifies deployment across different environments and ensures consistent behavior.
+
+> **Need help?** [Email the Protomated team](mailto:team@protomated.com?subject=LegalContext%20Assistance&body=Hello%20Protomated%20team%2C%0A%0AWe%20are%20interested%20in%20LegalContext%20for%20our%20law%20firm%20and%20would%20like%20assistance%20with%3A%0A%0A-%20%5B%20%5D%20Initial%20deployment%0A-%20%5B%20%5D%20Custom%20features%0A-%20%5B%20%5D%20Configuration%20for%20our%20specific%20needs%0A-%20%5B%20%5D%20Other%0A%0AFirm%20name%3A%20%0ANumber%20of%20attorneys%3A%20%0ANumber%20of%20documents%3A%20%0ACurrent%20document%20management%20system%3A%20%0A%0ABriefly%20describe%20your%20requirements%3A%0A%0A%0AThanks%2C%0A) for deployment assistance or custom features/configurations for your firm's specific needs.
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) 1.0 or higher
-- [Claude Desktop](https://claude.ai/desktop) (for integration testing)
-- Clio Developer Account (for API access)
+- Docker installed on the host machine
+- Docker Compose (optional, for more complex setups)
+- Network access to Clio API
+- Clio API credentials
 
-### Installation
+### Basic Docker Deployment
 
-1. Clone the repository:
+1. **Build the Docker Image**
 
-```bash
-git clone https://github.com/protomated/legal-context.git
-cd legal-context
-```
-
-2. Install dependencies:
-
-```bash
-bun install
-```
-
-3. Configure OAuth for Clio API:
-
-   a. Create a `.env.local` file in the project root:
-   ```
-   # Clio OAuth Configuration
-   CLIO_CLIENT_ID=your_client_id_here
-   CLIO_CLIENT_SECRET=your_client_secret_here
-   CLIO_REDIRECT_URI=http://127.0.0.1:3000/clio/auth/callback
-   CLIO_API_URL=https://app.clio.com/api/v4
-   
-   # Security Configuration
-   ENCRYPTION_KEY=your_random_32_character_string_here
-   
-   # Database Configuration
-   DATABASE_HOST=localhost
-   DATABASE_PORT=5432
-   DATABASE_USERNAME=postgres
-   DATABASE_PASSWORD=postgres
-   DATABASE_NAME=legalcontext_dev
-   ```
-
-   b. Obtain Clio API credentials:
-   - Log in to your Clio Developer account at https://app.clio.com/settings/developer/applications
-   - Create a new application with the following settings:
-     - Name: LegalContext
-     - Redirect URI: http://127.0.0.1:3000/clio/auth/callback
-     - Scopes: documents
-   - Copy the Client ID and Client Secret to your `.env.local` file
-
-   c. Run the OAuth setup script to authenticate with Clio:
    ```bash
-   bun run start:dev
+   docker build -t legalcontext-mcp-server:latest .
    ```
 
-   d. In a separate terminal, run the Clio authentication setup:
+2. **Create a docker-compose.yml File**
+
+   ```yaml
+   version: '3'
+   services:
+     legalcontext:
+       image: legalcontext-mcp-server:latest
+       container_name: legalcontext
+       restart: unless-stopped
+       volumes:
+         - ./lancedb:/app/lancedb  # Persist vector database
+         - ./config:/app/config    # Store configuration and tokens
+       environment:
+         - NODE_ENV=production
+         - LOG_LEVEL=info
+         - CLIO_CLIENT_ID=${CLIO_CLIENT_ID}
+         - CLIO_CLIENT_SECRET=${CLIO_CLIENT_SECRET}
+         - CLIO_REDIRECT_URI=${CLIO_REDIRECT_URI}
+         - CLIO_API_REGION=${CLIO_API_REGION}
+         - LANCEDB_DB_PATH=/app/lancedb
+         - MAX_DOCUMENTS=100
+         - MAX_QUERIES_PER_DAY=50
+       ports:
+         - "3001:3001"  # Expose HTTP port if needed
+   ```
+
+3. **Create an Environment Variables File**
+
+   Create a `.env` file in the same directory as your `docker-compose.yml`:
+   ```
+   CLIO_CLIENT_ID=your_client_id
+   CLIO_CLIENT_SECRET=your_client_secret
+   CLIO_REDIRECT_URI=https://your-server-address/auth/clio/callback
+   CLIO_API_REGION=us
+   ```
+
+4. **Start the Container**
+
    ```bash
-   bun run test:clio:auth
+   docker-compose up -d
    ```
 
-4. Build the project:
+### Advanced Firmwide Deployment
+
+For any firm seeking advanced deployments, consider these additional steps:
+
+1. **Authentication and Security**
+
+   - Use a reverse proxy (like Nginx or Traefik) to handle HTTPS termination
+   - Implement IP-based access controls to restrict access to the server
+   - Consider integration with the firm's identity provider (e.g., Azure AD, Okta) for authentication
+
+2. **High Availability Setup**
+
+   - Deploy multiple instances behind a load balancer
+   - Use shared storage (e.g., NFS, S3) for the vector database to enable scaling
+   - Implement health checks and automatic container restart
+
+3. **Monitoring and Logging**
+
+   ```yaml
+   version: '3'
+   services:
+     legalcontext:
+       # ... basic config as above
+       logging:
+         driver: "json-file"
+         options:
+           max-size: "10m"
+           max-file: "3"
+       # Add these if using Prometheus monitoring
+       labels:
+         - "prometheus.scrape=true"
+         - "prometheus.port=3001"
+         - "prometheus.path=/metrics"
+   ```
+
+4. **Using Docker Secrets for Sensitive Information**
+
+   ```yaml
+   version: '3.8'
+   services:
+     legalcontext:
+       # ... other configuration
+       secrets:
+         - clio_client_id
+         - clio_client_secret
+       environment:
+         - CLIO_CLIENT_ID_FILE=/run/secrets/clio_client_id
+         - CLIO_CLIENT_SECRET_FILE=/run/secrets/clio_client_secret
+         # ... other environment variables
+
+   secrets:
+     clio_client_id:
+       file: ./secrets/clio_client_id.txt
+     clio_client_secret:
+       file: ./secrets/clio_client_secret.txt
+   ```
+
+5. **Integration with Claude Desktop**
+
+   For firmwide deployments, instead of having each user configure Claude Desktop manually, consider:
+   
+   - Creating a standard Claude Desktop configuration package for distribution
+   - Using a centralized network service for MCP communication instead of stdio
+   - Developing a simple configuration utility that sets up the proper paths for each user
+
+   Example centralized configuration script:
+   ```bash
+   #!/bin/bash
+   # Script to configure Claude Desktop for LegalContext
+   
+   # Create config directory if it doesn't exist
+   mkdir -p ~/.config/Claude-Desktop
+   
+   # Generate the config file with the correct server address
+   cat > ~/.config/Claude-Desktop/claude_desktop_config.json << EOF
+   {
+     "mcpServers": [
+       {
+         "name": "LegalContext (Firm)",
+         "url": "http://legalcontext.internal.example.com:3001"
+       }
+     ]
+   }
+   EOF
+   
+   echo "Claude Desktop configured successfully."
+   ```
+
+### Updating the Docker Deployment
 
 ```bash
-bun run build
+# Pull the latest code
+git pull
+
+# Rebuild the Docker image
+docker-compose build
+
+# Restart the service
+docker-compose down
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
 ```
 
-### Running the Server
-
-Start the server with:
+### Backing Up the Vector Database
 
 ```bash
-bun run start
+# Stop the container
+docker-compose stop legalcontext
+
+# Back up the vector database
+tar -czf lancedb-backup-$(date +%Y%m%d).tar.gz ./lancedb
+
+# Restart the container
+docker-compose start legalcontext
 ```
 
-For development with auto-reload:
+## Clio Setup
+
+### Creating a Clio API Application
+
+1. Visit [Clio Developers Portal](https://app.clio.com/settings/developer_applications) (or your region-specific Clio instance)
+2. Click "New Application"
+3. Enter required information:
+   - **Name**: "LegalContext"
+   - **Redirect URI**: http://localhost:3001/auth/clio/callback (for local development)
+   - **Scopes**: documents, folders (minimum required)
+4. Save the application and note your Client ID and Client Secret
+
+## Usage
+
+### Authenticating with Clio
+
+1. Start the LegalContext server
+2. Visit http://localhost:3001/auth/clio in your browser
+3. Follow the OAuth flow to authorize LegalContext with your Clio account
+
+### Indexing Documents
+
+Run the document indexing process to pull and index Clio documents:
 
 ```bash
-bun run start:dev
+bun run src/scripts/index.ts
 ```
 
-### Testing
+This process:
+1. Fetches documents from Clio (up to 100 for free tier)
+2. Downloads document content
+3. Extracts text from PDFs and DOCXs
+4. Generates vector embeddings
+5. Stores embeddings in the local LanceDB database
 
-#### MCP Server Testing
+### Using with Claude Desktop
 
-You can test the MCP server using the included test client:
+1. Start Claude Desktop
+2. Verify LegalContext appears in the available tools list
+3. Ask legal questions that require access to your documents
+4. Claude will automatically use LegalContext to retrieve relevant context from your documents
 
-```bash
-bun run test:client
-```
+Example queries:
+- "What are the key provisions in our standard NDA?"
+- "Summarize the legal implications in the Johnson case documents."
+- "What arguments were made in our most recent motion for summary judgment?"
 
-This will start the server and connect a test client that will verify the basic functionality.
+## Security Considerations
 
-#### Clio API Integration Testing
+- **Data Boundary Control**: All document processing happens locally. Sensitive content never leaves your infrastructure during processing.
+- **Authentication**: OAuth 2.0 authentication with Clio protects document access.
+- **Token Security**: Access tokens are stored securely with encryption.
+- **Transparency**: Open-source codebase allows security review by your team.
 
-Verify your Clio integration with the following test scripts:
+## Limitations (Free Tier)
 
-```bash
-# Test Clio authentication
-bun run test:clio:auth
-
-# Test document listing and retrieval
-bun run test:clio:docs
-
-# Test document access control
-bun run test:clio:access
-
-# Test MCP-Clio integration
-bun run test:mcp:docs
-```
-
-These tests will verify that your Clio authentication is working, you can access documents, and that the MCP server can properly integrate with Clio documents.
-
-### Configuring Claude Desktop
-
-1. Install Claude Desktop from https://claude.ai/desktop
-2. Create a `claude-config.json` file in your Claude Desktop configuration directory:
-   - Windows: `%APPDATA%\Claude\claude-config.json`
-   - macOS: `~/Library/Application Support/Claude/claude-config.json`
-   - Linux: `~/.config/Claude/claude-config.json`
-
-3. Add the following configuration (adjust the path to your LegalContext installation):
-```json
-{
-  "mcpServers": {
-    "legalcontext": {
-      "command": "bunx",
-      "args": [
-        "run",
-        "start",
-        "--prefix",
-        "/path/to/legal-context"
-      ],
-      "cwd": "/path/to/legal-context"
-    }
-  }
-}
-```
-
-4. Restart Claude Desktop
-
-## Architecture
-
-LegalContext is built around a modular NestJS architecture:
-
-```mermaid
-graph TB
-    Claude[Claude Desktop] <--> |MCP/stdio| MCP[MCP Server]
-    MCP --> Resources[MCP Resources]
-    MCP --> Tools[MCP Tools]
-    
-    subgraph Clio Integration
-        Auth[ClioAuthService] --> |OAuth2.0| Clio[Clio API]
-        DocService[ClioDocumentService] --> Auth
-        MetaService[ClioDocumentMetadataService] --> DocService
-        BatchService[ClioDocumentBatchService] --> DocService
-        AccessControl[DocumentAccessControlService] --> DocService
-    end
-    
-    Resources --> DocService
-    Resources --> MetaService
-    Resources --> AccessControl
-    Tools --> DocService
-    Tools --> MetaService
-    Tools --> BatchService
-```
-
-The system is designed to keep all document processing within the firm's security perimeter, with zero sensitive data transmitted to external servers.
-
-## Documentation
-
-Additional documentation can be found in the `docs` directory:
-- [About LegalContext](docs/about-legal-context.md) - The "why" behind LegalContext
-- [Claude Desktop Integration](docs/mcp-client-integration.md) - Guide to integrating with Claude Desktop
-- [Security Architecture](docs/security-architecture.md) - Overview of the security design
-- [Development Roadmap](docs/development-roadmap.md) - Planned features and timeline
-
-## Core Components
-
-### MCP Components
-
-#### McpServerService
-
-Manages the MCP server lifecycle and connection to Claude Desktop.
-
-#### McpResourcesService
-
-Handles registration and management of resources that provide document context.
-
-#### McpToolsService
-
-Manages tools that enable Claude to perform actions like searching or retrieving documents.
-
-#### McpOrchestratorService
-
-Coordinates the initialization and operation of the MCP components.
-
-### Clio Integration Components
-
-#### ClioAuthService
-
-Manages OAuth 2.0 authentication with Clio, including token acquisition, refresh, and storage.
-
-#### ClioDocumentService
-
-Handles direct API interactions with Clio's document endpoints, providing CRUD operations for documents.
-
-#### ClioDocumentMetadataService
-
-Provides specialized metadata extraction, normalization, and organization of document information.
-
-#### ClioDocumentBatchService
-
-Offers batch operations for efficient handling of multiple documents from Clio.
-
-#### DocumentAccessControlService
-
-Enforces access permissions to ensure documents are only accessed by authorized users.
-
-## Security
-
-LegalContext prioritizes security at every level:
-
-1. **Data Boundary Control**: All document processing occurs locally within the firm's network
-2. **Secure Transport**: Uses stdio for communication with Claude Desktop
-3. **Access Control**: Enforces Clio's document access permissions at every level
-4. **Zero Data Transmission**: No document content sent to external servers
-5. **OAuth 2.0 with PKCE**: Implements secure authorization flow with Clio
-6. **Secure Token Management**: Encrypted storage of access and refresh tokens
-7. **Automatic Token Refresh**: Maintains authentication without user intervention
-8. **Access Logging**: Comprehensive audit logging of document access
-
-See the [Security Architecture](docs/security-architecture.md) document for more details.
+- Maximum of 100 indexed documents
+- 50 queries per day limit
+- Manual or scheduled batch indexing only (no real-time)
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-LegalContext is licensed under the [Mozilla Public License 2.0](LICENSE).
-
-## Support
-
-For support, please open an issue on GitHub or contact dele@protomated.com.
+This project is licensed under the [Mozilla Public License 2.0](LICENSE) - see the LICENSE file for details.

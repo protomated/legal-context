@@ -1,8 +1,7 @@
-bun.lock
 # compiled output
 /dist
 /node_modules
-/docs
+bun.lock
 # Logs
 logs
 *.log
@@ -11,7 +10,8 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-
+.junie
+.clio_tokens
 # OS
 .DS_Store
 
@@ -43,12 +43,15 @@ lerna-debug.log*
 # Temporary files
 tmp/
 temp/
+codebase.md
 
-## DOCS
-**/*.md
-!README.md
+# Test files
+test-files/*
+!test-files/README.md
 
-## Misc
-check-pgvector.sh
-demo.sh
-**/*.sh
+# DB
+lancedb/
+*.lance
+
+# Explicitly include Bun lockfile
+!bun.lockb
