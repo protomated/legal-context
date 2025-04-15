@@ -187,41 +187,34 @@ export class DocumentIndexer {
 
       // Main vectors table with enhanced schema
       if (tables.includes('vectors')) {
-        // Check if we need to migrate the schema for existing table
         try {
           const table = await db.openTable('vectors');
-          const schema = await table.schema();
-
-          // Check if our schema has changed and needs migration
-          const needsMigration = !schema.fieldNames.includes('metadata.version') ||
-            !schema.fieldNames.includes('metadata.lastIndexed');
-
-          if (needsMigration) {
-            logger.info('Schema change detected. Creating new vectors table with updated schema');
+          this.tablePromise = Promise.resolve(table);
+          this.initialized = true;
+          logger.info('Using existing vectors table');
+          return true;
+        } catch (tableError) {
+          logger.error('Error opening vectors table:', tableError);
+          try {
             await db.dropTable('vectors');
-          } else {
-            logger.info('Using existing vectors table with compatible schema');
-            this.tablePromise = Promise.resolve(table);
-            this.initialized = true;
-            return true;
+            logger.info('Dropped problematic vectors table');
+          } catch (dropError) {
+            logger.error('Error dropping vectors table:', dropError);
           }
-        } catch (schemaError) {
-          logger.error('Error checking schema, recreating table:', schemaError);
-          await db.dropTable('vectors');
         }
       }
 
-      // Create a new table with the enhanced schema
-      logger.info('Creating new vectors table in LanceDB with enhanced schema');
+      // Create a new table with simplified schema
+      logger.info('Creating new vectors table with simplified schema');
 
-      // Sample document for schema definition with enhanced metadata
-      const sampleChunk: IndexedChunk = {
+      // Use a simplified sample with no boolean fields
+      const sampleChunk = {
         id: 'sample_chunk',
         text: 'This is a sample text for schema creation',
         doc_id: 'sample_doc',
         doc_uri: 'Sample Document',
         chunk_id: 0,
-        vector: new Array(EMBEDDING_DIMENSION).fill(0),
+        vector: new Array(384).fill(0),
         metadata: {
           contentType: 'text/plain',
           category: 'sample',
@@ -232,12 +225,10 @@ export class DocumentIndexer {
           lastIndexed: new Date().toISOString(),
           sectionTitle: 'Sample Section',
           sectionNumber: '1.0',
-          isHeading: false,
+          // Convert boolean to string or number
+          isHeading: 0, // Using 0/1 instead of boolean
           citations: ['Sample v. Citation, 123 F.3d 456 (2023)'],
           clauseType: 'sample',
-          // Path: /Users/deletosh/projects/legal-context/src/documents/documentIndexer.ts
-// (continuing from where we left off)
-
           parentFolder: {
             id: 'folder-1',
             name: 'Sample Folder',
@@ -245,48 +236,27 @@ export class DocumentIndexer {
         },
       };
 
-      this.tablePromise = db.createTable('vectors', [sampleChunk]);
-
-      // Wait for table creation to complete
-      const table = await this.tablePromise;
-
-      // Verify the table was created successfully
-      const countResult = await table.countRows();
-      const rowCount = typeof countResult === 'number' ? countResult :
-        (countResult && countResult.count ? countResult.count : 0);
-
-      logger.info(`Initialized table with ${rowCount} sample row(s)`);
-
-      // Try to query the table to verify it works
       try {
-        const queryResult = await table.query().execute();
-        const resultArray = Array.isArray(queryResult) ? queryResult :
-          (queryResult && typeof queryResult === 'object' && queryResult.data ?
-            queryResult.data : []);
+        this.tablePromise = db.createTable('vectors', [sampleChunk]);
+        const table = await this.tablePromise;
 
-        logger.info(`Verified query access: retrieved ${resultArray.length} row(s)`);
+        const countResult = await table.countRows();
+        const rowCount = typeof countResult === 'number' ? countResult :
+          (countResult && countResult.count ? countResult.count : 0);
 
-        if (resultArray.length > 0) {
-          logger.debug(`Sample row: ${JSON.stringify(resultArray[0], null, 2)}`);
-        }
-      } catch (queryError) {
-        logger.warn(`Could not verify query access: ${queryError}`);
+        logger.info(`Initialized table with ${rowCount} sample row(s)`);
+
+        this.initialized = true;
+        logger.info('Document indexer initialized successfully');
+        return true;
+      } catch (createError) {
+        logger.error('Failed to create vectors table:', createError);
+        throw createError;
       }
-
-      this.initialized = true;
-      logger.info('Document indexer initialized successfully');
-      return true;
     } catch (error) {
       logger.error('Failed to initialize document indexer:', error);
       return false;
     }
-  }
-
-  /**
-   * Check if the indexer is initialized
-   */
-  public isInitialized(): boolean {
-    return this.initialized;
   }
 
   /**
@@ -301,10 +271,15 @@ export class DocumentIndexer {
       }
 
       const versionsTable = await db.openTable('document_versions');
-      const versions = await versionsTable.query().execute();
+      const versionsResult = await versionsTable.query().execute();
 
       // Reset version map
       this.documentVersions = new Map();
+
+      // Ensure versions is an array before iterating
+      const versions = Array.isArray(versionsResult) ? versionsResult :
+        (versionsResult && typeof versionsResult === 'object' && versionsResult.data ?
+          versionsResult.data : []);
 
       // Load versions into memory
       for (const row of versions) {
@@ -366,15 +341,19 @@ export class DocumentIndexer {
   private generateDocumentVersion(document: ProcessedDocument): string {
     // Create a hash of the document text and metadata
     const hash = crypto.createHash('md5');
-    hash.update(document.text);
-    hash.update(document.name);
-    hash.update(document.metadata.updated);
+    hash.update(document.text || '');
+    hash.update(document.name || '');
 
-    if (document.metadata.contentType) {
+    // Safely handle potentially undefined metadata
+    if (document.metadata?.updated) {
+      hash.update(document.metadata.updated);
+    }
+
+    if (document.metadata?.contentType) {
       hash.update(document.metadata.contentType);
     }
 
-    if (document.metadata.category) {
+    if (document.metadata?.category) {
       hash.update(document.metadata.category);
     }
 

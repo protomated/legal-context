@@ -19,7 +19,7 @@ import { logger } from '../logger';
 import { getClioApiClient } from '../clio';
 import { processDocument } from './documentProcessor';
 import { getDocumentIndexer } from './documentIndexer';
-import { ClioDocument, getClioApiClient, isProcessableDocument } from '../clio';
+import { ClioDocument, isProcessableDocument } from '../clio';
 import { config } from '../config';
 
 // Maximum number of documents to process in a batch
@@ -73,7 +73,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     const documentIndexer = getDocumentIndexer();
 
     // Initialize the document indexer if needed
-    if (!documentIndexer.isInitialized()) {
+    if (!documentIndexer.isInitialized) {
       logger.info('Initializing document indexer');
       await documentIndexer.initialize();
     }
@@ -94,19 +94,26 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     const remainingCapacity = MAX_DOCUMENTS - currentDocumentCount;
     logger.info(`Remaining document capacity: ${remainingCapacity}`);
 
-// Retrieve documents from Clio (first page with remaining capacity)
     // Retrieve documents from Clio (first page with remaining capacity)
     logger.info(`Retrieving up to ${remainingCapacity} documents from Clio`);
     const documentsResponse = await clioApiClient.listDocuments(1, remainingCapacity);
-    const allDocuments = documentsResponse.data;
 
-// Log raw document data to help debug
+    // Log API response for debugging
+    logger.debug(`Clio API response status: ${documentsResponse ? 'Received' : 'Empty'}`);
+    logger.debug(`Clio API response meta: ${JSON.stringify(documentsResponse.meta || {})}`);
+    logger.debug(`Clio API retrieved ${documentsResponse.data ? documentsResponse.data.length : 0} documents`);
+
+    const allDocuments = documentsResponse.data || [];
+
+    // Log raw document data to help debug
     logger.debug(`Retrieved ${allDocuments.length} raw documents from Clio`);
     if (allDocuments.length > 0) {
       logger.debug(`Sample document: ${JSON.stringify(allDocuments[0], null, 2)}`);
+    } else {
+      logger.warn('No documents returned from Clio API. Check your Clio account and permissions.');
     }
 
-// Filter out documents that are not processable
+    // Filter out documents that are not processable
     const documents = allDocuments.filter(doc => isProcessableDocument(doc));
 
     result.totalDocuments = allDocuments.length;
@@ -130,36 +137,60 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
         logger.info(`Processing document ${result.processedDocuments + 1}/${documents.length}: ${document.id} - ${document.name}`);
 
         try {
+          // Get the complete document information first
+          logger.debug(`Retrieving full document information for: ${document.id}`);
+          let fullDocument = document;
+
+          // Only fetch full document info if the current data seems incomplete
+          if (!document.created_at || !document.updated_at || !document.content_type) {
+            try {
+              const documentData = await clioApiClient.getDocument(document.id);
+              fullDocument = documentData.data;
+              logger.debug(`Retrieved full document info: ${fullDocument.name} (${fullDocument.content_type || 'unknown type'})`);
+            } catch (docError) {
+              logger.warn(`Could not retrieve full document info for ${document.id}, using partial data: ${docError}`);
+              // Continue with partial data
+
+              // Ensure minimum required fields are set
+              if (!fullDocument.created_at) {
+                fullDocument.created_at = new Date().toISOString();
+              }
+              if (!fullDocument.updated_at) {
+                fullDocument.updated_at = new Date().toISOString();
+              }
+            }
+          }
+
           // Process the document (download, extract text)
-          logger.debug(`Fetching and extracting content for document: ${document.id}`);
-          const processedDocument = await processDocument(document.id);
+          logger.debug(`Fetching and extracting content for document: ${fullDocument.id}`);
+          const processedDocument = await processDocument(fullDocument.id);
 
           // Check if the document has content
           if (!processedDocument.text || processedDocument.text.trim().length === 0) {
-            logger.warn(`Document ${document.id} has no text content to index`);
+            logger.warn(`Document ${fullDocument.id} has no text content to index`);
             result.failedDocuments++;
             result.errors.push({
-              documentId: document.id,
-              error: `Document has no text content to index: ${document.name}`,
+              documentId: fullDocument.id,
+              error: `Document has no text content to index: ${fullDocument.name}`,
             });
             result.processedDocuments++;
             continue;
           }
 
           // Log document content size
-          logger.debug(`Document ${document.id} has ${processedDocument.text.length} characters of text content`);
+          logger.debug(`Document ${fullDocument.id} has ${processedDocument.text.length} characters of text content`);
 
           // Index the document (chunk, embed, store)
-          logger.debug(`Indexing document: ${document.id}`);
+          logger.debug(`Indexing document: ${fullDocument.id}`);
           const indexed = await documentIndexer.indexDocument(processedDocument);
 
           if (indexed) {
             result.successfulDocuments++;
-            logger.info(`Successfully indexed document: ${document.id} - ${document.name}`);
+            logger.info(`Successfully indexed document: ${fullDocument.id} - ${fullDocument.name}`);
           } else {
             result.failedDocuments++;
-            const errorMessage = `Failed to index document: ${document.id} - ${document.name}`;
-            result.errors.push({ documentId: document.id, error: errorMessage });
+            const errorMessage = `Failed to index document: ${fullDocument.id} - ${fullDocument.name}`;
+            result.errors.push({ documentId: fullDocument.id, error: errorMessage });
             logger.error(errorMessage);
           }
         } catch (processingError) {
@@ -217,7 +248,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     if (finalIndexStats.documentCount >= MAX_DOCUMENTS) {
       logger.warn(`Document limit (${MAX_DOCUMENTS}) has been reached. No more documents will be indexed until some are removed.`);
     } else {
-      logger.info(`Document capacity remaining: ${MAX_DOCUMENTS - indexStats.documentCount} of ${MAX_DOCUMENTS}`);
+      logger.info(`Document capacity remaining: ${MAX_DOCUMENTS - finalIndexStats.documentCount} of ${MAX_DOCUMENTS}`);
     }
 
   } catch (error) {
@@ -289,4 +320,3 @@ export async function runBatchIndexing(): Promise<string> {
     return `Failed to run batch indexing: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
-

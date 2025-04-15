@@ -95,6 +95,10 @@ export class ClioApiClient {
         return false;
       }
 
+      // Log token information for debugging
+      logger.debug(`Loaded tokens with access token: ${this.tokens.access_token ? '****' + this.tokens.access_token.substring(this.tokens.access_token.length - 4) : 'Missing'}`);
+      logger.debug(`Token created at: ${this.tokens.created_at ? new Date(this.tokens.created_at * 1000).toISOString() : 'Unknown'}`);
+
       // Check if tokens need to be refreshed
       if (isTokenExpired(this.tokens)) {
         logger.info('Access token expired. Attempting to refresh...');
@@ -104,7 +108,7 @@ export class ClioApiClient {
           await secureTokenStorage.saveTokens(this.tokens);
           logger.info('Token refreshed successfully');
         } catch (error) {
-          logger.error('Failed to refresh token. Re-authentication required.');
+          logger.error('Failed to refresh token. Re-authentication required.', error);
           return false;
         }
       }
@@ -563,7 +567,6 @@ export function isProcessableDocument(document: ClioDocument): boolean {
 
   return true;
 }
-
 
 // Export a singleton instance
 export const clioApiClient = new ClioApiClient();
