@@ -1,5 +1,3 @@
-// Path: /Users/deletosh/projects/legal-context/src/documents/embeddings.ts
-
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -42,19 +40,19 @@ const embeddingCache: Map<string, number[]> = new Map();
  */
 const LEGAL_NORMALIZATION_PATTERNS: [RegExp, string][] = [
   // Standardize case citations
-  [/([A-Za-z\s.,']+)\s+v\.\s+([A-Za-z\s.,']+),\s+(\d+)\s+(?:F\.|U\.S\.|S\.Ct\.|P\.)(?:\d+d?)?\s+(\d+)(?:\s+\([A-Za-z\d\s.]+\s+\d{4}\))?/g, "CASE_CITATION"],
+  [/([A-Za-z\s.,']+)\s+v\.\s+([A-Za-z\s.,']+),\s+(\d+)\s+(?:F\.|U\.S\.|S\.Ct\.|P\.)(?:\d+d?)?\s+(\d+)(?:\s+\([A-Za-z\d\s.]+\s+\d{4}\))?/g, 'CASE_CITATION'],
 
   // Standardize statute citations
-  [/(\d+)\s+([A-Za-z.]+)(?:\s+[Cc]ode)?\s+§+\s+(\d+[A-Za-z\d.-]*)/g, "STATUTE_CITATION"],
+  [/(\d+)\s+([A-Za-z.]+)(?:\s+[Cc]ode)?\s+§+\s+(\d+[A-Za-z\d.-]*)/g, 'STATUTE_CITATION'],
 
   // Standardize legal document references
-  [/(?:pursuant to|in accordance with|as defined in|as set forth in)\s+(?:Section|Article|Paragraph|Clause)\s+[A-Z0-9.]+/gi, "DOCUMENT_REFERENCE"],
+  [/(?:pursuant to|in accordance with|as defined in|as set forth in)\s+(?:Section|Article|Paragraph|Clause)\s+[A-Z0-9.]+/gi, 'DOCUMENT_REFERENCE'],
 
   // Standardize common Latin legal phrases
-  [/(?:inter alia|prima facie|de novo|ex parte|in camera|pro se|sua sponte|sub judice|amicus curiae|habeas corpus|res judicata|stare decisis)/gi, "LATIN_PHRASE"],
+  [/(?:inter alia|prima facie|de novo|ex parte|in camera|pro se|sua sponte|sub judice|amicus curiae|habeas corpus|res judicata|stare decisis)/gi, 'LATIN_PHRASE'],
 
   // Common legal abbreviations
-  [/(?:\b(?:LLC|LLP|Inc\.|Corp\.|P\.A\.|Ltd\.|et al\.|i\.e\.|e\.g\.|etc\.|ibid\.|op\. cit\.|supra|infra)\b)/g, "LEGAL_ABBREV"]
+  [/(?:\b(?:LLC|LLP|Inc\.|Corp\.|P\.A\.|Ltd\.|et al\.|i\.e\.|e\.g\.|etc\.|ibid\.|op\. cit\.|supra|infra)\b)/g, 'LEGAL_ABBREV'],
 ];
 
 /**
@@ -81,10 +79,10 @@ function preprocessLegalText(text: string): string {
   }
 
   // Handle enumerated lists which are common in legal docs
-  processedText = processedText.replace(/^\s*(?:[0-9]+\.|[a-z]\.|[A-Z]\.|\([i|v|x]+\)|\([a-z]\)|\([0-9]+\))\s+/gm, "LIST_ITEM ");
+  processedText = processedText.replace(/^\s*(?:[0-9]+\.|[a-z]\.|[A-Z]\.|\([i|v|x]+\)|\([a-z]\)|\([0-9]+\))\s+/gm, 'LIST_ITEM ');
 
   // Handle legal document sections
-  processedText = processedText.replace(/(?:ARTICLE|Section|SECTION|Article)\s+([IVX0-9]+[A-Za-z]?(?:\.[0-9]+)?)/g, "SECTION_REFERENCE");
+  processedText = processedText.replace(/(?:ARTICLE|Section|SECTION|Article)\s+([IVX0-9]+[A-Za-z]?(?:\.[0-9]+)?)/g, 'SECTION_REFERENCE');
 
   return processedText;
 }
@@ -100,6 +98,12 @@ export async function generateEmbedding(textChunk: string | TextChunk): Promise<
     // Get text content from chunk or use directly if string
     const text = typeof textChunk === 'string' ? textChunk : textChunk.text;
 
+    // Make sure we have some text to embed
+    if (!text || text.trim().length === 0) {
+      logger.warn('Empty text provided for embedding, returning zero vector');
+      return Array(EMBEDDING_DIMENSION).fill(0);
+    }
+
     // Check cache first
     const cacheKey = text.slice(0, 1000); // Use first 1000 chars as cache key to avoid excessive memory usage
     if (embeddingCache.has(cacheKey)) {
@@ -108,26 +112,58 @@ export async function generateEmbedding(textChunk: string | TextChunk): Promise<
 
     // Preprocess the text with legal-specific normalizations
     const preprocessedText = preprocessLegalText(text);
+    logger.debug(`Generating embedding for text (${preprocessedText.length} chars)`);
 
     // Get the pipeline instance
     const embeddingPipeline = await getEmbeddingPipeline();
 
-    // Generate embedding
-    const output = await embeddingPipeline(preprocessedText, {
-      pooling: 'mean', // Average pooling for sentence embeddings
-      normalize: true   // Normalize the embeddings
-    });
+    // Generate embedding with detailed error handling
+    try {
+      // Generate embedding
+      const output = await embeddingPipeline(preprocessedText, {
+        pooling: 'mean', // Average pooling for sentence embeddings
+        normalize: true,   // Normalize the embeddings
+      });
 
-    // Convert to standard JavaScript array
-    const embedding = Array.from(output.data as Float32Array);
+      // Convert to standard JavaScript array
+      const embedding = Array.from(output.data as Float32Array);
 
-    // Add to cache
-    embeddingCache.set(cacheKey, embedding);
+      // Validate embedding and ensure normalization
+      if (!embedding || embedding.length === 0) {
+        logger.error('Empty embedding generated');
+        return Array(EMBEDDING_DIMENSION).fill(0.1); // Return a fallback embedding
+      }
 
-    return embedding;
+      if (embedding.some(val => isNaN(val))) {
+        logger.error('Embedding contains NaN values');
+        return Array(EMBEDDING_DIMENSION).fill(0.1); // Return a fallback embedding
+      }
+
+      // Log embedding stats for debugging
+      const sum = embedding.reduce((acc, val) => acc + val, 0);
+      const mag = Math.sqrt(embedding.reduce((acc, val) => acc + val * val, 0));
+      logger.debug(`Embedding stats: sum=${sum.toFixed(2)}, magnitude=${mag.toFixed(2)}, dimension=${embedding.length}`);
+
+      // Ensure normalized embedding
+      if (Math.abs(mag - 1.0) > 0.01) {
+        logger.debug('Re-normalizing embedding vector');
+        // Re-normalize if not already normalized
+        const normalizedEmbedding = embedding.map(val => val / mag);
+        embeddingCache.set(cacheKey, normalizedEmbedding);
+        return normalizedEmbedding;
+      }
+
+      // Add to cache
+      embeddingCache.set(cacheKey, embedding);
+      return embedding;
+    } catch (pipelineError) {
+      logger.error(`Pipeline error generating embedding: ${pipelineError}`);
+      throw pipelineError;
+    }
   } catch (error) {
     logger.error('Error generating embedding:', error);
-    throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : String(error)}`);
+    // Return a fallback embedding of the correct dimension
+    return Array(EMBEDDING_DIMENSION).fill(0.1);
   }
 }
 
@@ -137,6 +173,11 @@ export async function generateEmbedding(textChunk: string | TextChunk): Promise<
  */
 export async function generateQueryEmbedding(query: string): Promise<number[]> {
   try {
+    if (!query || query.trim().length === 0) {
+      logger.warn('Empty query provided for embedding, returning zero vector');
+      return Array(EMBEDDING_DIMENSION).fill(0);
+    }
+
     // Preprocess the query for legal search
     const enhancedQuery = enhanceQueryForLegalSearch(query);
 
@@ -144,7 +185,8 @@ export async function generateQueryEmbedding(query: string): Promise<number[]> {
     return generateEmbedding(enhancedQuery);
   } catch (error) {
     logger.error('Error generating query embedding:', error);
-    throw new Error(`Failed to generate query embedding: ${error instanceof Error ? error.message : String(error)}`);
+    // Return a fallback embedding of the correct dimension
+    return Array(EMBEDDING_DIMENSION).fill(0.1);
   }
 }
 
@@ -157,13 +199,13 @@ function enhanceQueryForLegalSearch(query: string): string {
 
   // Expand common legal abbreviations to improve matching
   enhancedQuery = enhancedQuery
-    .replace(/\bP\.A\./g, "Professional Association")
-    .replace(/\bLLC\b/g, "Limited Liability Company")
-    .replace(/\bLLP\b/g, "Limited Liability Partnership")
-    .replace(/\bv\.\b/g, "versus")
-    .replace(/\bet al\.\b/g, "and others")
-    .replace(/\bi\.e\.\b/g, "that is")
-    .replace(/\be\.g\.\b/g, "for example");
+    .replace(/\bP\.A\./g, 'Professional Association')
+    .replace(/\bLLC\b/g, 'Limited Liability Company')
+    .replace(/\bLLP\b/g, 'Limited Liability Partnership')
+    .replace(/\bv\.\b/g, 'versus')
+    .replace(/\bet al\.\b/g, 'and others')
+    .replace(/\bi\.e\.\b/g, 'that is')
+    .replace(/\be\.g\.\b/g, 'for example');
 
   // Apply legal-specific preprocessing
   return preprocessLegalText(enhancedQuery);
@@ -174,6 +216,8 @@ function enhanceQueryForLegalSearch(query: string): string {
  */
 export function clearEmbeddingCache(): void {
   embeddingCache.clear();
+  // Also reset the pipeline promise to force reloading the model
+  embeddingPipelinePromise = null;
   logger.info('Embedding cache cleared');
 }
 
@@ -196,6 +240,6 @@ export function getEmbeddingCacheStats(): { count: number, memoryUsageEstimate: 
 
   return {
     count: embeddingCache.size,
-    memoryUsageEstimate: memoryUsage
+    memoryUsageEstimate: memoryUsage,
   };
 }
