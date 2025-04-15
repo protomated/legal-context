@@ -836,6 +836,18 @@ export class DocumentIndexer {
       };
     }
   }
+
+  /**
+   * Get the underlying LanceDB table
+   * Used for direct queries to check indexed documents
+   */
+  public async getTable(): Promise<any> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    return this.tablePromise;
+  }
 }
 
 /**

@@ -52,6 +52,7 @@ test-files/*
 # DB
 lancedb/
 *.lance
+indexed_documents.json
 
 # Explicitly include Bun lockfile
 !bun.lockb

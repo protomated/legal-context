@@ -21,9 +21,14 @@ import { processDocument } from './documentProcessor';
 import { getDocumentIndexer } from './documentIndexer';
 import { ClioDocument, isProcessableDocument } from '../clio';
 import { config } from '../config';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Maximum number of documents to process in a batch
 export const MAX_DOCUMENTS = 100;
+
+// Path to store the list of indexed documents
+const INDEXED_DOCS_PATH = path.join(process.cwd(), 'indexed_documents.json');
 
 /**
  * Interface for batch indexing results
@@ -33,10 +38,66 @@ export interface BatchIndexingResult {
   processedDocuments: number;
   successfulDocuments: number;
   failedDocuments: number;
+  skippedDocuments: number; // Added to track skipped documents
   errors: Array<{ documentId: string; error: string }>;
   startTime: Date;
   endTime: Date;
   durationMs: number;
+}
+
+/**
+ * Load previously indexed document IDs
+ */
+async function loadIndexedDocumentIds(): Promise<Set<string>> {
+  try {
+    if (fs.existsSync(INDEXED_DOCS_PATH)) {
+      const data = await Bun.file(INDEXED_DOCS_PATH).text();
+      const parsed = JSON.parse(data);
+      const ids = new Set(parsed.documentIds || []);
+      logger.info(`Loaded ${ids.size} previously indexed document IDs`);
+      return ids;
+    }
+  } catch (error) {
+    logger.warn(`Error loading indexed document IDs: ${error}`);
+  }
+
+  logger.info('No previously indexed documents found or error loading them');
+  return new Set();
+}
+
+/**
+ * Save the list of indexed document IDs
+ */
+async function saveIndexedDocumentIds(documentIds: Set<string>): Promise<void> {
+  try {
+    const saveData = {
+      documentIds: Array.from(documentIds),
+      lastUpdated: new Date().toISOString(),
+    };
+
+    await Bun.write(INDEXED_DOCS_PATH, JSON.stringify(saveData, null, 2));
+    logger.info(`Saved ${documentIds.size} indexed document IDs to tracking file`);
+  } catch (error) {
+    logger.error(`Error saving indexed document IDs: ${error}`);
+  }
+}
+
+/**
+ * Add document IDs to the tracking list and save
+ */
+async function updateIndexedDocumentsList(newDocumentIds: string[]): Promise<void> {
+  try {
+    // Load existing indexed document IDs
+    const indexedDocIds = await loadIndexedDocumentIds();
+
+    // Add new document IDs
+    newDocumentIds.forEach(id => indexedDocIds.add(id));
+
+    // Save the updated set
+    await saveIndexedDocumentIds(indexedDocIds);
+  } catch (error) {
+    logger.error(`Error updating indexed documents list: ${error}`);
+  }
 }
 
 /**
@@ -54,6 +115,7 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
     processedDocuments: 0,
     successfulDocuments: 0,
     failedDocuments: 0,
+    skippedDocuments: 0, // Initialize skipped documents counter
     errors: [],
     startTime,
     endTime: new Date(),
@@ -74,201 +136,159 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
 
     // Initialize the document indexer if needed
     if (!documentIndexer.isInitialized) {
-      logger.info('Initializing document indexer');
       await documentIndexer.initialize();
     }
 
-    // Get current document count from the index
-    const indexStats = await documentIndexer.getIndexStats();
-    const currentDocumentCount = indexStats.documentCount;
-    logger.info(`Current document count in index: ${currentDocumentCount}/${MAX_DOCUMENTS}`);
+    // Load previously indexed document IDs
+    const indexedDocIds = await loadIndexedDocumentIds();
+    logger.info(`Loaded ${indexedDocIds.size} previously indexed document IDs`);
 
-    // Check if we've already reached the document limit
-    if (currentDocumentCount >= MAX_DOCUMENTS) {
-      logger.warn(`Document limit (${MAX_DOCUMENTS}) already reached. No new documents will be indexed.`);
-      result.totalDocuments = 0;
-      return result;
-    }
-
-    // Calculate how many more documents we can index
-    const remainingCapacity = MAX_DOCUMENTS - currentDocumentCount;
-    logger.info(`Remaining document capacity: ${remainingCapacity}`);
-
-    // Retrieve documents from Clio (first page with remaining capacity)
-    logger.info(`Retrieving up to ${remainingCapacity} documents from Clio`);
-    const documentsResponse = await clioApiClient.listDocuments(1, remainingCapacity);
-
-    // Log API response for debugging
-    logger.debug(`Clio API response status: ${documentsResponse ? 'Received' : 'Empty'}`);
-    logger.debug(`Clio API response meta: ${JSON.stringify(documentsResponse.meta || {})}`);
-    logger.debug(`Clio API retrieved ${documentsResponse.data ? documentsResponse.data.length : 0} documents`);
-
-    const allDocuments = documentsResponse.data || [];
-
-    // Log raw document data to help debug
-    logger.debug(`Retrieved ${allDocuments.length} raw documents from Clio`);
-    if (allDocuments.length > 0) {
-      logger.debug(`Sample document: ${JSON.stringify(allDocuments[0], null, 2)}`);
-    } else {
-      logger.warn('No documents returned from Clio API. Check your Clio account and permissions.');
-    }
+    // Retrieve documents from Clio
+    logger.info(`Retrieving documents from Clio (limit: ${MAX_DOCUMENTS})`);
+    const documentsResponse = await clioApiClient.listDocuments(1, MAX_DOCUMENTS);
 
     // Filter out documents that are not processable
-    const documents = allDocuments.filter(doc => isProcessableDocument(doc));
-
+    const allDocuments = documentsResponse.data || [];
     result.totalDocuments = allDocuments.length;
-    const skippedDocuments = allDocuments.length - documents.length;
-    if (skippedDocuments > 0) {
-      logger.info(`Retrieved ${allDocuments.length} documents from Clio, filtered out ${skippedDocuments} non-processable documents`);
-    } else {
-      logger.info(`Retrieved ${documents.length} documents from Clio`);
-    }
 
-    // Process each document
-    for (const document of documents) {
-      try {
-        // Check if we've reached the document limit before processing each document
-        const currentStats = await documentIndexer.getIndexStats();
-        if (currentStats.documentCount >= MAX_DOCUMENTS) {
-          logger.warn(`Document limit (${MAX_DOCUMENTS}) reached. Stopping indexing process.`);
-          break;
-        }
+    const processableDocuments = allDocuments.filter(doc => isProcessableDocument(doc));
+    logger.info(`Found ${processableDocuments.length} processable documents out of ${allDocuments.length} total documents`);
 
-        logger.info(`Processing document ${result.processedDocuments + 1}/${documents.length}: ${document.id} - ${document.name}`);
+    // Track successfully indexed document IDs
+    const successfulDocumentIds: string[] = [];
 
-        try {
-          // Get the complete document information first
-          logger.debug(`Retrieving full document information for: ${document.id}`);
-          let fullDocument = document;
-
-          // Only fetch full document info if the current data seems incomplete
-          if (!document.created_at || !document.updated_at || !document.content_type) {
-            try {
-              const documentData = await clioApiClient.getDocument(document.id);
-              fullDocument = documentData.data;
-              logger.debug(`Retrieved full document info: ${fullDocument.name} (${fullDocument.content_type || 'unknown type'})`);
-            } catch (docError) {
-              logger.warn(`Could not retrieve full document info for ${document.id}, using partial data: ${docError}`);
-              // Continue with partial data
-
-              // Ensure minimum required fields are set
-              if (!fullDocument.created_at) {
-                fullDocument.created_at = new Date().toISOString();
-              }
-              if (!fullDocument.updated_at) {
-                fullDocument.updated_at = new Date().toISOString();
-              }
-            }
-          }
-
-          // Process the document (download, extract text)
-          logger.debug(`Fetching and extracting content for document: ${fullDocument.id}`);
-          const processedDocument = await processDocument(fullDocument.id);
-
-          // Check if the document has content
-          if (!processedDocument.text || processedDocument.text.trim().length === 0) {
-            logger.warn(`Document ${fullDocument.id} has no text content to index`);
-            result.failedDocuments++;
-            result.errors.push({
-              documentId: fullDocument.id,
-              error: `Document has no text content to index: ${fullDocument.name}`,
-            });
-            result.processedDocuments++;
-            continue;
-          }
-
-          // Log document content size
-          logger.debug(`Document ${fullDocument.id} has ${processedDocument.text.length} characters of text content`);
-
-          // Index the document (chunk, embed, store)
-          logger.debug(`Indexing document: ${fullDocument.id}`);
-          const indexed = await documentIndexer.indexDocument(processedDocument);
-
-          if (indexed) {
-            result.successfulDocuments++;
-            logger.info(`Successfully indexed document: ${fullDocument.id} - ${fullDocument.name}`);
-          } else {
-            result.failedDocuments++;
-            const errorMessage = `Failed to index document: ${fullDocument.id} - ${fullDocument.name}`;
-            result.errors.push({ documentId: fullDocument.id, error: errorMessage });
-            logger.error(errorMessage);
-          }
-        } catch (processingError) {
-          // Handle errors during document processing
-          result.failedDocuments++;
-
-          // Create a descriptive error message based on the error type
-          let errorMessage: string;
-
-          if (processingError instanceof Error) {
-            // If it's a standard error, use its message
-            errorMessage = `Error processing document ${document.id} (${document.name}): ${processingError.message}`;
-
-            // Add stack trace to debug log
-            logger.debug(`Stack trace for document ${document.id} error:`, processingError.stack);
-          } else {
-            // For other error types
-            errorMessage = `Error processing document ${document.id} (${document.name}): ${String(processingError)}`;
-          }
-
-          // Record the error in the results
-          result.errors.push({ documentId: document.id, error: errorMessage });
-          logger.error(errorMessage);
-
-          // Log document metadata for debugging
-          try {
-            logger.debug(`Document metadata: ${JSON.stringify({
-              id: document.id,
-              name: document.name,
-              content_type: document.content_type,
-              size: document.size,
-              created_at: document.created_at,
-              updated_at: document.updated_at,
-            })}`);
-          } catch (metadataError) {
-            logger.debug(`Could not log document metadata: ${String(metadataError)}`);
-          }
-        }
-      } catch (outerError) {
-        // Handle errors in the outer loop (should be rare)
-        result.failedDocuments++;
-        const errorMessage = `Unexpected error while processing document batch: ${outerError instanceof Error ? outerError.message : String(outerError)}`;
-        result.errors.push({ documentId: document.id, error: errorMessage });
-        logger.error(errorMessage);
+    // Process each document, but skip already indexed ones
+    for (const document of processableDocuments) {
+      // Skip already indexed documents
+      if (indexedDocIds.has(document.id)) {
+        logger.debug(`Skipping already indexed document: ${document.id} - ${document.name || 'No name'}`);
+        result.skippedDocuments++;
+        continue;
       }
 
       result.processedDocuments++;
+
+      try {
+        // Get the full document details
+        logger.debug(`Getting full details for document ${document.id}`);
+        const fullDocumentResponse = await clioApiClient.getDocument(document.id);
+        const fullDocument = fullDocumentResponse.data;
+
+        // Process and index the document
+        logger.info(`Processing document: ${fullDocument.id} - ${fullDocument.name || 'No name'}`);
+        const processedDocument = await processDocument(fullDocument.id);
+
+        // Index the document
+        logger.info(`Indexing document: ${processedDocument.id} - ${processedDocument.name}`);
+        const indexed = await documentIndexer.indexDocument(processedDocument);
+
+        // Track the result
+        if (indexed) {
+          result.successfulDocuments++;
+          successfulDocumentIds.push(fullDocument.id);
+          logger.info(`Successfully indexed document: ${fullDocument.id} - ${fullDocument.name || 'No name'}`);
+        } else {
+          result.failedDocuments++;
+          result.errors.push({
+            documentId: fullDocument.id,
+            error: 'Indexing failed for unknown reason',
+          });
+          logger.error(`Failed to index document: ${fullDocument.id} - ${fullDocument.name || 'No name'}`);
+        }
+      } catch (docError) {
+        result.failedDocuments++;
+        result.errors.push({
+          documentId: document.id,
+          error: docError instanceof Error ? docError.message : String(docError),
+        });
+        logger.error(`Error processing document ${document.id}: ${docError}`);
+      }
+
+      // Enforce document limits for free tier
+      if (result.processedDocuments >= MAX_DOCUMENTS) {
+        logger.info(`Reached maximum document limit (${MAX_DOCUMENTS}). Stopping batch process.`);
+        break;
+      }
     }
 
-    // Get final index statistics
-    const finalIndexStats = await documentIndexer.getIndexStats();
-    logger.info(`Document index now contains ${finalIndexStats.documentCount} documents with ${finalIndexStats.chunkCount} chunks`);
-
-    // Check if we've reached the document limit
-    if (finalIndexStats.documentCount >= MAX_DOCUMENTS) {
-      logger.warn(`Document limit (${MAX_DOCUMENTS}) has been reached. No more documents will be indexed until some are removed.`);
-    } else {
-      logger.info(`Document capacity remaining: ${MAX_DOCUMENTS - finalIndexStats.documentCount} of ${MAX_DOCUMENTS}`);
+    // Update the list of indexed documents with the new successfully indexed ones
+    if (successfulDocumentIds.length > 0) {
+      await updateIndexedDocumentsList(successfulDocumentIds);
     }
 
+    // Calculate final statistics
+    result.endTime = new Date();
+    result.durationMs = result.endTime.getTime() - result.startTime.getTime();
+
+    logger.info(`Batch document indexing completed in ${result.durationMs / 1000} seconds`);
+    logger.info(`Total documents: ${result.totalDocuments}, Processed: ${result.processedDocuments}, Successful: ${result.successfulDocuments}, Failed: ${result.failedDocuments}, Skipped: ${result.skippedDocuments}`);
+
+    if (result.errors.length > 0) {
+      logger.warn(`Encountered ${result.errors.length} errors during indexing`);
+    }
+
+    return result;
   } catch (error) {
-    const errorMessage = `Batch indexing process failed: ${error instanceof Error ? error.message : String(error)}`;
-    logger.error(errorMessage);
-    result.errors.push({ documentId: 'batch', error: errorMessage });
+    result.endTime = new Date();
+    result.durationMs = result.endTime.getTime() - result.startTime.getTime();
+
+    logger.error('Error during batch document indexing:', error);
+
+    result.errors.push({
+      documentId: 'batch_process',
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return result;
   }
+}
 
-  // Calculate duration and set end time
-  const endTime = new Date();
-  result.endTime = endTime;
-  result.durationMs = endTime.getTime() - startTime.getTime();
+/**
+ * Check if there are new documents to index
+ */
+export async function checkForNewDocuments(): Promise<{ hasNew: boolean, newCount: number, totalCount: number }> {
+  try {
+    // Get the Clio API client
+    const clioApiClient = getClioApiClient();
 
-  // Log summary
-  logger.info(`Batch indexing completed in ${result.durationMs / 1000} seconds`);
-  logger.info(`Documents processed: ${result.processedDocuments}/${result.totalDocuments}`);
-  logger.info(`Documents successfully indexed: ${result.successfulDocuments}`);
-  logger.info(`Documents failed: ${result.failedDocuments}`);
+    // Check if Clio API client is initialized
+    if (!await clioApiClient.initialize()) {
+      throw new Error('Clio API client not initialized. Authentication required.');
+    }
 
-  return result;
+    // Load previously indexed document IDs
+    const indexedDocIds = await loadIndexedDocumentIds();
+
+    // Retrieve documents from Clio
+    logger.info(`Checking for new documents in Clio`);
+    const documentsResponse = await clioApiClient.listDocuments(1, MAX_DOCUMENTS);
+
+    // Filter out documents that are not processable
+    const allDocuments = documentsResponse.data || [];
+    const processableDocuments = allDocuments.filter(doc => isProcessableDocument(doc));
+
+    // Count new documents (processable documents not already indexed)
+    const newDocuments = processableDocuments.filter(doc => !indexedDocIds.has(doc.id));
+    const newCount = newDocuments.length;
+
+    logger.info(`Found ${newCount} new documents out of ${processableDocuments.length} processable documents in Clio`);
+
+    // If there are no new documents, skip processing
+    return {
+      hasNew: newCount > 0,
+      newCount,
+      totalCount: processableDocuments.length,
+    };
+  } catch (error) {
+    logger.error(`Error checking for new documents: ${error}`);
+    // Return that there are new documents if we encounter an error
+    // This ensures we don't skip indexing due to an error in the check
+    return {
+      hasNew: true,
+      newCount: 1, // Assume at least one new document
+      totalCount: 1,
+    };
+  }
 }
 
 /**
@@ -277,45 +297,39 @@ export async function batchIndexDocuments(): Promise<BatchIndexingResult> {
  */
 export async function runBatchIndexing(): Promise<string> {
   try {
-    const result = await batchIndexDocuments();
+    // Check if there are new documents before starting the full process
+    const newDocumentsCheck = await checkForNewDocuments();
 
-    // Get current document count from the index
-    const documentIndexer = getDocumentIndexer();
-    const indexStats = await documentIndexer.getIndexStats();
-
-    // Use the successful documents count from our result as a fallback
-    // if the database query doesn't return the correct count
-    const currentDocumentCount = indexStats.documentCount > 0 ?
-      indexStats.documentCount : result.successfulDocuments;
-
-    // Format a summary for display/logging
-    const summary = [
-      `Batch Document Indexing Summary:`,
-      `------------------------------`,
-      `Start time: ${result.startTime.toISOString()}`,
-      `End time: ${result.endTime.toISOString()}`,
-      `Duration: ${(result.durationMs / 1000).toFixed(2)} seconds`,
-      ``,
-      `Documents:`,
-      `  Total retrieved: ${result.totalDocuments}`,
-      `  Successfully processed: ${result.successfulDocuments}`,
-      `  Failed: ${result.failedDocuments}`,
-      ``,
-      `Document Limit Status:`,
-      `  Current document count: ${currentDocumentCount}/${MAX_DOCUMENTS}`,
-      `  Remaining capacity: ${Math.max(0, MAX_DOCUMENTS - currentDocumentCount)}`,
-      `  Limit reached: ${currentDocumentCount >= MAX_DOCUMENTS ? 'Yes' : 'No'}`,
-      ``,
-    ];
-
-    if (result.errors.length > 0) {
-      summary.push(`Errors:`);
-      result.errors.forEach(err => {
-        summary.push(`  - Document ${err.documentId}: ${err.error}`);
-      });
+    if (!newDocumentsCheck.hasNew) {
+      return `Batch Document Indexing Summary:
+------------------------------
+No new documents found in Clio. Skipping indexing process.
+Total documents in Clio: ${newDocumentsCheck.totalCount}
+Current time: ${new Date().toISOString()}`;
     }
 
-    return summary.join('\n');
+    // Proceed with full batch indexing if new documents were found
+    logger.info(`Found ${newDocumentsCheck.newCount} new documents to index. Proceeding with indexing...`);
+    const result = await batchIndexDocuments();
+
+    // Format the summary
+    const summary = `Batch Document Indexing Summary:
+------------------------------
+Start time: ${result.startTime.toISOString()}
+End time: ${result.endTime.toISOString()}
+Duration: ${(result.durationMs / 1000).toFixed(2)} seconds
+
+Documents:
+- Total from Clio: ${result.totalDocuments}
+- Processed: ${result.processedDocuments}
+- Successfully indexed: ${result.successfulDocuments}
+- Failed: ${result.failedDocuments}
+- Skipped (already indexed): ${result.skippedDocuments}
+
+${result.errors.length > 0 ? `Errors (${result.errors.length}):
+${result.errors.map((err, i) => `${i + 1}. Document ${err.documentId}: ${err.error}`).join('\n')}` : 'No errors encountered during indexing.'}`;
+
+    return summary;
   } catch (error) {
     return `Failed to run batch indexing: ${error instanceof Error ? error.message : String(error)}`;
   }
