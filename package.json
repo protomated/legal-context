@@ -1,6 +1,6 @@
 {
   "name": "@protomated/legal-context",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "An open-source MCP server that connects Clio document management with Claude Desktop",
   "main": "dist/server.js",
   "type": "module",
@@ -29,7 +29,7 @@
   ],
   "scripts": {
     "start": "bun run src/server.ts",
-   "dev": "bun --watch run src/server.ts",
+    "dev": "bun --watch run src/server.ts",
     "setup": "bun run setup.ts",
     "check:clio": "bun run src/tools/check-clio.ts",
     "auth:simple": "bun run src/tools/simple-auth.ts",
