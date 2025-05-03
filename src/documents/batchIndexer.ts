@@ -259,17 +259,34 @@ export async function checkForNewDocuments(): Promise<{ hasNew: boolean, newCoun
     // Load previously indexed document IDs
     const indexedDocIds = await loadIndexedDocumentIds();
 
+    // Convert to strings to ensure consistent comparison
+    const indexedIdsAsStrings = new Set(Array.from(indexedDocIds).map(String));
+
     // Retrieve documents from Clio
     logger.info(`Checking for new documents in Clio`);
     const documentsResponse = await clioApiClient.listDocuments(1, MAX_DOCUMENTS);
+
+    // Log total documents for debugging
+    logger.info(`Retrieved ${documentsResponse.data.length} documents from Clio (total: ${documentsResponse.meta.paging.total_entries})`);
 
     // Filter out documents that are not processable
     const allDocuments = documentsResponse.data || [];
     const processableDocuments = allDocuments.filter(doc => isProcessableDocument(doc));
 
+    logger.info(`Found ${processableDocuments.length} processable documents out of ${allDocuments.length} total documents`);
+
     // Count new documents (processable documents not already indexed)
-    const newDocuments = processableDocuments.filter(doc => !indexedDocIds.has(doc.id));
+    // Make sure to convert IDs to strings to ensure consistent comparison
+    const newDocuments = processableDocuments.filter(doc => !indexedIdsAsStrings.has(String(doc.id)));
     const newCount = newDocuments.length;
+
+    // Log the first few new documents to help with debugging
+    if (newCount > 0) {
+      logger.info(`First few new documents:`);
+      newDocuments.slice(0, 3).forEach(doc => {
+        logger.info(`- ID: ${doc.id}, Name: ${doc.name || 'No name'}, Type: ${doc.content_type || 'Unknown'}`);
+      });
+    }
 
     logger.info(`Found ${newCount} new documents out of ${processableDocuments.length} processable documents in Clio`);
 
@@ -290,7 +307,6 @@ export async function checkForNewDocuments(): Promise<{ hasNew: boolean, newCoun
     };
   }
 }
-
 /**
  * Run the batch indexing process and return a formatted summary
  * This function is designed to be called from a script or scheduler

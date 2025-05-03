@@ -67,13 +67,28 @@ let authenticationFailed = false;
  * Determines if a document is processable based on its content type
  */
 export function isProcessableDocument(doc: ClioDocument): boolean {
-  if (!doc.content_type) return false;
+  // Accept documents even if content_type is missing
+  if (!doc.content_type) return true;
 
+  // Convert to lowercase for case-insensitive matching
   const contentType = doc.content_type.toLowerCase();
-  return contentType.includes('pdf') ||
-    contentType.includes('word') ||
-    contentType.includes('text') ||
-    contentType.includes('docx');
+
+  // List of content types to exclude (add problematic types here)
+  const excludedTypes = [
+    'image/', // Image files
+    'video/', // Video files
+    'audio/'  // Audio files
+  ];
+
+  // Check if the content type is in the excluded list
+  for (const excludeType of excludedTypes) {
+    if (contentType.includes(excludeType)) {
+      return false;
+    }
+  }
+
+  // Accept all other document types
+  return true;
 }
 
 /**
