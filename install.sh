@@ -71,7 +71,7 @@ declare -a required_vars=(
     "PORT:3001:Port for the OAuth HTTP server"
     "CLIO_CLIENT_ID::Clio API Client ID from developer portal"
     "CLIO_CLIENT_SECRET::Clio API Client Secret from developer portal"
-    "CLIO_REDIRECT_URI:http://localhost:3001/clio/auth/callback:OAuth callback URL (must match Clio settings)"
+    "CLIO_REDIRECT_URI:http://127.0.0.1:3001/clio/auth/callback:OAuth callback URL (must match Clio settings)"
     "CLIO_API_REGION:us:Clio API region (us, ca, eu, au)"
     "LANCEDB_DB_PATH:./lancedb:Path to store LanceDB database files"
     "SECRET_KEY::Secret key for encrypting stored tokens"
@@ -83,11 +83,11 @@ declare -a required_vars=(
 for var_info in "${required_vars[@]}"; do
     # Split the var_info string
     IFS=':' read -r key default description <<< "$var_info"
-    
+
     # Check if variable exists in .env file
     if ! grep -q "^${key}=" .env; then
         echo -e "${YELLOW}Missing ${key}${NC} - ${description}"
-        
+
         # For sensitive info, don't show default
         if [[ "$key" == "CLIO_CLIENT_ID" || "$key" == "CLIO_CLIENT_SECRET" || "$key" == "SECRET_KEY" ]]; then
             if [[ "$key" == "SECRET_KEY" ]]; then
@@ -115,81 +115,7 @@ done
 
 echo -e "${GREEN}✓ Environment variables configured${NC}"
 
-# Step 3: Setup OAuth with Clio
-echo -e "\n${BOLD}Setting up OAuth with Clio...${NC}"
-
-# Display Clio configuration info
-CLIO_CLIENT_ID=$(grep "^CLIO_CLIENT_ID=" .env | cut -d= -f2)
-CLIO_REDIRECT_URI=$(grep "^CLIO_REDIRECT_URI=" .env | cut -d= -f2)
-CLIO_API_REGION=$(grep "^CLIO_API_REGION=" .env | cut -d= -f2)
-PORT=$(grep "^PORT=" .env | cut -d= -f2)
-
-echo -e "\n${CYAN}Clio API Configuration:${NC}"
-if [[ -n "$CLIO_CLIENT_ID" ]]; then
-    # Show just the last 4 characters of the client ID for security
-    echo -e "• Client ID: ****${CLIO_CLIENT_ID: -4}"
-else
-    echo -e "• Client ID: Not set"
-fi
-echo -e "• Redirect URI: ${CLIO_REDIRECT_URI:-http://localhost:3001/clio/auth/callback}"
-echo -e "• API Region: ${CLIO_API_REGION:-us}"
-
-# Instructions for registering with Clio
-echo -e "\n${YELLOW}Make sure you have registered this application in the Clio Developer Portal:${NC}"
-echo -e "1. Go to: ${CYAN}https://app.clio.com/settings/developer_applications${NC} (or your region-specific Clio URL)"
-echo -e "2. Create a new application (if not done already)"
-echo -e "3. Set the redirect URI to exactly: ${CYAN}${CLIO_REDIRECT_URI:-http://localhost:3001/clio/auth/callback}${NC}"
-echo -e "4. Copy the Client ID and Client Secret to your .env file"
-
-# Ask if user wants to start OAuth flow
-read -p $'\nDo you want to start the OAuth authorization flow now? (y/n): ' start_auth </dev/tty
-
-if [[ "$start_auth" == "y" || "$start_auth" == "Y" ]]; then
-    # Check for required environment variables
-    if [[ -z "$CLIO_CLIENT_ID" || -z "$(grep -E "^CLIO_CLIENT_SECRET=.+" .env)" ]]; then
-        echo -e "${RED}Error: Missing required Clio API credentials in .env file${NC}"
-        exit 1
-    fi
-    
-    echo -e "\n${YELLOW}Starting OAuth server...${NC}"
-    
-    # Start server in background
-    bun run src/server.ts &
-    SERVER_PID=$!
-    
-    # Wait for server to start
-    sleep 2
-    
-    # Open browser to auth URL
-    AUTH_URL="http://localhost:${PORT:-3001}/clio/auth"
-    echo -e "\n${BOLD}Opening browser to authorize with Clio: ${CYAN}${AUTH_URL}${NC}"
-    
-    # Open browser based on platform
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        open "$AUTH_URL"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        xdg-open "$AUTH_URL" 2>/dev/null || sensible-browser "$AUTH_URL" 2>/dev/null || \
-        echo -e "${YELLOW}Please open this URL in your browser:${NC} ${AUTH_URL}"
-    else
-        # Windows
-        start "$AUTH_URL" 2>/dev/null || \
-        echo -e "${YELLOW}Please open this URL in your browser:${NC} ${AUTH_URL}"
-    fi
-    
-    # Wait for user to complete authorization
-    read -p $'\n'"${YELLOW}Press Enter after completing the authorization process in your browser...${NC}" </dev/tty
-    
-    # Stop the server
-    kill $SERVER_PID 2>/dev/null
-    
-    echo -e "${GREEN}✓ OAuth setup completed${NC}"
-else
-    echo -e "${YELLOW}Skipped OAuth authorization flow${NC}"
-    echo -e "You can run the authorization flow later by starting the server with ${CYAN}bun start${NC}"
-    echo -e "Then visit ${CYAN}http://localhost:${PORT:-3001}/clio/auth${NC}"
-fi
-
-# Step 4: Update Claude Desktop configuration
+# Step 3: Update Claude Desktop configuration
 echo -e "\n${BOLD}Setting up Claude Desktop configuration...${NC}"
 
 # Determine Claude Desktop config path
@@ -219,88 +145,30 @@ echo -e "${CYAN}Claude config path:${NC} $CLAUDE_CONFIG_PATH"
 CLAUDE_CONFIG_DIR=$(dirname "$CLAUDE_CONFIG_PATH")
 mkdir -p "$CLAUDE_CONFIG_DIR"
 
-# Create or update Claude config
-if [ -f "$CLAUDE_CONFIG_PATH" ]; then
-    echo -e "${GREEN}✓ Found existing Claude Desktop config${NC}"
-    
-    # Check if jq is available for JSON manipulation
-    if command -v jq &> /dev/null; then
-        # Use jq to update the config
-        if [ -f "$CLAUDE_CONFIG_PATH.bak" ]; then
-            rm "$CLAUDE_CONFIG_PATH.bak"
-        fi
-        cp "$CLAUDE_CONFIG_PATH" "$CLAUDE_CONFIG_PATH.bak"
-        
-        # Update config using jq
-        jq --arg cmd "$BUN_PATH" --arg path "$PROJECT_PATH/src/server.ts" --arg cwd "$PROJECT_PATH" \
-           '.mcpServers.legalcontext = {"command": $cmd, "args": [$path], "cwd": $cwd}' "$CLAUDE_CONFIG_PATH.bak" > "$CLAUDE_CONFIG_PATH"
-        
-        echo -e "${GREEN}✓ Updated Claude Desktop config with LegalContext server${NC}"
-    else
-        # Manual approach if jq is not available
-        echo -e "${YELLOW}jq not found. Manually updating config...${NC}"
-        
-        # Create backup
-        if [ -f "$CLAUDE_CONFIG_PATH.bak" ]; then
-            rm "$CLAUDE_CONFIG_PATH.bak"
-        fi
-        cp "$CLAUDE_CONFIG_PATH" "$CLAUDE_CONFIG_PATH.bak"
-        
-        # Check if mcpServers exists in the config
-        if grep -q '"mcpServers"' "$CLAUDE_CONFIG_PATH"; then
-            # Update existing mcpServers section (simple approach)
-            # This is a simplified approach and might not work for all JSON structures
-            # A proper JSON parser like jq is recommended
-            echo -e "${YELLOW}Attempting to update existing mcpServers section...${NC}"
-            
-            # Try to replace mcpServers section with a new one that includes legalcontext
-            # This is a very simplistic approach and might fail for complex JSON structures
-            sed -i.tmp -e '/"mcpServers"[[:space:]]*:/{
-                :a
-                n
-                /}/!ba
-                s/}/,"legalcontext": {"command": "'"$BUN_PATH"'", "args": ["'"$PROJECT_PATH/src/server.ts"'"], "cwd": "'"$PROJECT_PATH"'"}}/
-            }' "$CLAUDE_CONFIG_PATH"
-            
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}✓ Updated Claude Desktop config with LegalContext server${NC}"
-            else
-                echo -e "${RED}Failed to update config. Please install jq or update manually.${NC}"
-                echo -e "Configuration to add:"
-                echo -e '{\n  "mcpServers": {\n    "legalcontext": {\n      "command": "'"$BUN_PATH"'",\n      "args": ["'"$PROJECT_PATH/src/server.ts"'"],\n      "cwd": "'"$PROJECT_PATH"'"\n    }\n  }\n}'
-            fi
-        else
-            # If mcpServers doesn't exist, create a new config
-            echo '{
-  "mcpServers": {
-    "legalcontext": {
-      "command": "'"$BUN_PATH"'",
-      "args": ["'"$PROJECT_PATH/src/server.ts"'"],
-      "cwd": "'"$PROJECT_PATH"'"
-    }
-  }
-}' > "$CLAUDE_CONFIG_PATH"
-            
-            echo -e "${GREEN}✓ Created new Claude Desktop config with LegalContext server${NC}"
-        fi
-    fi
-else
-    echo -e "${YELLOW}No Claude Desktop config found, creating new one${NC}"
-    
-    # Create new config from scratch
-    echo '{
-  "mcpServers": {
-    "legalcontext": {
-      "command": "'"$BUN_PATH"'",
-      "args": ["'"$PROJECT_PATH/src/server.ts"'"],
-      "cwd": "'"$PROJECT_PATH"'"
-    }
-  }
-}' > "$CLAUDE_CONFIG_PATH"
-    
-    echo -e "${GREEN}✓ Created new Claude Desktop config with LegalContext server${NC}"
-fi
+# Load Clio credentials from .env
+CLIO_CLIENT_ID=$(grep "^CLIO_CLIENT_ID=" .env | cut -d= -f2)
+CLIO_CLIENT_SECRET=$(grep "^CLIO_CLIENT_SECRET=" .env | cut -d= -f2)
+CLIO_REDIRECT_URI=$(grep "^CLIO_REDIRECT_URI=" .env | cut -d= -f2)
+CLIO_API_REGION=$(grep "^CLIO_API_REGION=" .env | cut -d= -f2)
 
+# Create Claude Desktop config with environment variables
+echo '{
+  "mcpServers": {
+    "legalcontext": {
+      "command": "'$BUN_PATH'",
+      "args": ["'$PROJECT_PATH'/src/server.ts"],
+      "cwd": "'$PROJECT_PATH'",
+      "env": {
+        "CLIO_CLIENT_ID": "'$CLIO_CLIENT_ID'",
+        "CLIO_CLIENT_SECRET": "'$CLIO_CLIENT_SECRET'",
+        "CLIO_REDIRECT_URI": "'$CLIO_REDIRECT_URI'",
+        "CLIO_API_REGION": "'$CLIO_API_REGION'"
+      }
+    }
+  }
+}' > "$CLAUDE_CONFIG_PATH"
+
+echo -e "${GREEN}✓ Created Claude Desktop config with LegalContext server${NC}"
 echo -e "${YELLOW}Note: You may need to restart Claude Desktop for changes to take effect${NC}"
 
 # Final instructions

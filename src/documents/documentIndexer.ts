@@ -116,7 +116,6 @@ let indexerInstance: DocumentIndexer | null = null;
 export class DocumentIndexer {
   private dbPromise: Promise<any>;
   private tablePromise: Promise<any> | null = null;
-  private initialized = false;
   private documentVersions: Map<string, string> = new Map();
 
   // In-memory cache of indexed chunks for faster retrieval

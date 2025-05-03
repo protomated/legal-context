@@ -15,31 +15,33 @@
  * including semantic search using document embeddings.
  */
 
-import { z } from "zod";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { logger } from "../logger";
-import { getClioApiClient, ClioDocument } from "../clio";
-import { processDocument } from "../documents/documentProcessor";
-import { getDocumentIndexer } from "../documents/documentIndexer";
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { logger } from '../logger';
+import { getClioApiClient, ClioDocument } from '../clio';
+import { processDocument } from '../documents/documentProcessor';
+import { getDocumentIndexer } from '../documents/documentIndexer';
+import { isClioAuthenticated, getClioAuthInstructions } from '../clio/authStatus';
+
 
 /**
  * Register document search tools with the MCP server
  */
 export function registerDocumentSearchTools(server: McpServer): void {
-  logger.info("Registering document search tools...");
+  logger.info('Registering document search tools...');
 
   // Document Search Tool
   server.tool(
-    "document_search",
-    "Searches through the firm's document management system for legal documents matching specified criteria.",
+    'document_search',
+    'Searches through the firm\'s document management system for legal documents matching specified criteria.',
     {
-      query: z.string().describe("The search query for finding documents."),
-      documentType: z.string().optional().describe("Optional document type filter."),
+      query: z.string().describe('The search query for finding documents.'),
+      documentType: z.string().optional().describe('Optional document type filter.'),
       dateRange: z.object({
         start: z.string().optional(),
-        end: z.string().optional()
-      }).optional().describe("Optional date range filter."),
-      client: z.string().optional().describe("Optional client name filter.")
+        end: z.string().optional(),
+      }).optional().describe('Optional date range filter.'),
+      client: z.string().optional().describe('Optional client name filter.'),
     },
     async ({ query, documentType, dateRange, client }) => {
       logger.info(`Searching documents: ${query}, type: ${documentType || 'all'}, dateRange: ${JSON.stringify(dateRange || {})}, client: ${client || 'all'}`);
@@ -49,12 +51,13 @@ export function registerDocumentSearchTools(server: McpServer): void {
         const clioApiClient = getClioApiClient();
 
         // Check if Clio API client is initialized
-        if (!await clioApiClient.initialize()) {
-          logger.warn("Clio API client not initialized. Using placeholder data.");
+        if (!await isClioAuthenticated()) {
+          logger.warn('Clio API client not authenticated. Providing authentication instructions.');
+
           return {
             content: [{
-              type: "text",
-              text: "Clio integration is not authenticated. Please visit the authentication URL to connect with Clio."
+              type: 'text',
+              text: getClioAuthInstructions(),
             }],
             isError: true,
           };
@@ -67,7 +70,7 @@ export function registerDocumentSearchTools(server: McpServer): void {
         // Check if any documents were found
         if (!searchResults.data || searchResults.data.length === 0) {
           return {
-            content: [{ type: "text", text: "No documents found matching the specified criteria." }]
+            content: [{ type: 'text', text: 'No documents found matching the specified criteria.' }],
           };
         }
 
@@ -107,24 +110,24 @@ export function registerDocumentSearchTools(server: McpServer): void {
         response += `Showing ${searchResults.data.length} of ${totalDocuments} documents (Page ${currentPage} of ${totalPages})`;
 
         return {
-          content: [{ type: "text", text: response }]
+          content: [{ type: 'text', text: response }],
         };
       } catch (error) {
-        logger.error("Error searching documents:", error);
+        logger.error('Error searching documents:', error);
         return {
-          content: [{ type: "text", text: "An error occurred while searching for documents." }],
+          content: [{ type: 'text', text: 'An error occurred while searching for documents.' }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Document Metadata Tool
   server.tool(
-    "document_metadata",
-    "Retrieves comprehensive metadata information about a specific legal document.",
+    'document_metadata',
+    'Retrieves comprehensive metadata information about a specific legal document.',
     {
-      documentId: z.string().describe("The ID of the document to get metadata for.")
+      documentId: z.string().describe('The ID of the document to get metadata for.'),
     },
     async ({ documentId }) => {
       logger.info(`Getting document metadata: ${documentId}`);
@@ -135,11 +138,11 @@ export function registerDocumentSearchTools(server: McpServer): void {
 
         // Check if Clio API client is initialized
         if (!await clioApiClient.initialize()) {
-          logger.warn("Clio API client not initialized. Using placeholder data.");
+          logger.warn('Clio API client not initialized. Using placeholder data.');
           return {
             content: [{
-              type: "text",
-              text: "Clio integration is not authenticated. Please visit the authentication URL to connect with Clio."
+              type: 'text',
+              text: 'Clio integration is not authenticated. Please visit the authentication URL to connect with Clio.',
             }],
             isError: true,
           };
@@ -189,31 +192,31 @@ export function registerDocumentSearchTools(server: McpServer): void {
           response += `- Download URL: legal://documents/${document.id}/download\n`;
 
           return {
-            content: [{ type: "text", text: response }]
+            content: [{ type: 'text', text: response }],
           };
         } catch (docError) {
           // If document not found or other API error
           logger.error(`Error retrieving document metadata for ID ${documentId}:`, docError);
           return {
-            content: [{ type: "text", text: `Document with ID "${documentId}" not found or not accessible.` }]
+            content: [{ type: 'text', text: `Document with ID "${documentId}" not found or not accessible.` }],
           };
         }
       } catch (error) {
-        logger.error("Error getting document metadata:", error);
+        logger.error('Error getting document metadata:', error);
         return {
-          content: [{ type: "text", text: "An error occurred while retrieving document metadata." }],
+          content: [{ type: 'text', text: 'An error occurred while retrieving document metadata.' }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Document Content Tool
   server.tool(
-    "document_content",
-    "Retrieves and displays the full content of a legal document with statistics and metadata summary.",
+    'document_content',
+    'Retrieves and displays the full content of a legal document with statistics and metadata summary.',
     {
-      documentId: z.string().describe("The ID of the document to retrieve content for.")
+      documentId: z.string().describe('The ID of the document to retrieve content for.'),
     },
     async ({ documentId }) => {
       logger.info(`Retrieving document content: ${documentId}`);
@@ -254,25 +257,25 @@ export function registerDocumentSearchTools(server: McpServer): void {
         response += `- Word Count (approx): ${processedDocument.text.split(/\s+/).length}\n`;
 
         return {
-          content: [{ type: "text", text: response }]
+          content: [{ type: 'text', text: response }],
         };
       } catch (error) {
-        logger.error("Error retrieving document content:", error);
+        logger.error('Error retrieving document content:', error);
         return {
-          content: [{ type: "text", text: "An error occurred while retrieving document content." }],
+          content: [{ type: 'text', text: 'An error occurred while retrieving document content.' }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Semantic Document Search Tool
   server.tool(
-    "semantic_document_search",
-    "Performs semantic vector search across indexed documents to find content similar to the query, regardless of exact keyword matches.",
+    'semantic_document_search',
+    'Performs semantic vector search across indexed documents to find content similar to the query, regardless of exact keyword matches.',
     {
-      query: z.string().describe("The search query to find semantically similar document content."),
-      limit: z.number().min(1).max(20).optional().describe("Maximum number of results to return (default: 5).")
+      query: z.string().describe('The search query to find semantically similar document content.'),
+      limit: z.number().min(1).max(20).optional().describe('Maximum number of results to return (default: 5).'),
     },
     async ({ query, limit = 5 }) => {
       logger.info(`Performing semantic vector search: "${query}" with limit ${limit}`);
@@ -293,9 +296,9 @@ export function registerDocumentSearchTools(server: McpServer): void {
         if (indexStats.documentCount === 0 && indexStats.chunkCount === 0) {
           return {
             content: [{
-              type: "text",
-              text: "No documents have been indexed yet. Please index some documents before performing semantic search."
-            }]
+              type: 'text',
+              text: 'No documents have been indexed yet. Please index some documents before performing semantic search.',
+            }],
           };
         }
 
@@ -307,9 +310,9 @@ export function registerDocumentSearchTools(server: McpServer): void {
         if (searchResults.length === 0) {
           return {
             content: [{
-              type: "text",
-              text: `No documents found that semantically match the query: "${query}". Try a different query or index more documents.`
-            }]
+              type: 'text',
+              text: `No documents found that semantically match the query: "${query}". Try a different query or index more documents.`,
+            }],
           };
         }
 
@@ -345,8 +348,8 @@ export function registerDocumentSearchTools(server: McpServer): void {
           }
 
           // Add a snippet of the matching text
-          response += `   Snippet: "${result.text.length > 200 
-            ? result.text.substring(0, 200) + '...' 
+          response += `   Snippet: "${result.text.length > 200
+            ? result.text.substring(0, 200) + '...'
             : result.text}"\n`;
 
           response += `   URL: legal://documents/${result.documentId}\n\n`;
@@ -362,27 +365,27 @@ export function registerDocumentSearchTools(server: McpServer): void {
         }
 
         return {
-          content: [{ type: "text", text: response }]
+          content: [{ type: 'text', text: response }],
         };
       } catch (error) {
-        logger.error("Error performing semantic vector search:", error);
+        logger.error('Error performing semantic vector search:', error);
         return {
           content: [{
-            type: "text",
-            text: "An error occurred while performing semantic vector search. Please check the server logs for details."
+            type: 'text',
+            text: 'An error occurred while performing semantic vector search. Please check the server logs for details.',
           }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   // Document Indexing Tool
   server.tool(
-    "index_document",
-    "Indexes a document for semantic search by processing its content and storing embeddings.",
+    'index_document',
+    'Indexes a document for semantic search by processing its content and storing embeddings.',
     {
-      documentId: z.string().describe("The ID of the document to index.")
+      documentId: z.string().describe('The ID of the document to index.'),
     },
     async ({ documentId }) => {
       logger.info(`Indexing document for semantic search: ${documentId}`);
@@ -408,15 +411,15 @@ export function registerDocumentSearchTools(server: McpServer): void {
 
           return {
             content: [{
-              type: "text",
-              text: `Successfully indexed document "${processedDocument.name}" (ID: ${documentId}) for semantic search.\n\nCurrent index contains ${indexStats.documentCount} documents with ${indexStats.chunkCount} indexed chunks.`
-            }]
+              type: 'text',
+              text: `Successfully indexed document "${processedDocument.name}" (ID: ${documentId}) for semantic search.\n\nCurrent index contains ${indexStats.documentCount} documents with ${indexStats.chunkCount} indexed chunks.`,
+            }],
           };
         } else {
           return {
             content: [{
-              type: "text",
-              text: `Failed to index document ${documentId}. The document may be empty or in an unsupported format.`
+              type: 'text',
+              text: `Failed to index document ${documentId}. The document may be empty or in an unsupported format.`,
             }],
             isError: true,
           };
@@ -425,14 +428,14 @@ export function registerDocumentSearchTools(server: McpServer): void {
         logger.error(`Error indexing document ${documentId}:`, error);
         return {
           content: [{
-            type: "text",
-            text: "An error occurred while indexing the document. Please check the server logs for details."
+            type: 'text',
+            text: 'An error occurred while indexing the document. Please check the server logs for details.',
           }],
           isError: true,
         };
       }
-    }
+    },
   );
 
-  logger.info("Document search tools registered successfully");
+  logger.info('Document search tools registered successfully');
 }
