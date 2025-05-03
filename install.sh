@@ -18,11 +18,11 @@ echo -e "${BOLD}Checking for Bun installation...${NC}"
 
 if ! command -v bun &> /dev/null; then
     echo -e "${YELLOW}Bun is not installed. Installing now...${NC}"
-    
+
     if [[ "$OSTYPE" == "darwin"* || "$OSTYPE" == "linux-gnu"* ]]; then
         # macOS or Linux
         curl -fsSL https://bun.sh/install | bash
-        
+
         # Add to current PATH
         export PATH="$HOME/.bun/bin:$PATH"
     else
@@ -33,7 +33,7 @@ if ! command -v bun &> /dev/null; then
         echo -e "  3. Restart your terminal after installation"
         read -p "Press Enter once you have installed Bun..." </dev/tty
     fi
-    
+
     # Verify installation
     if command -v bun &> /dev/null; then
         echo -e "${GREEN}✓ Bun installed successfully $(bun --version)${NC}"
@@ -53,7 +53,7 @@ if [ -f .env ]; then
     echo -e "${GREEN}✓ Found .env file${NC}"
 else
     echo -e "${YELLOW}No .env file found. Creating one...${NC}"
-    
+
     # If .env.example exists, copy it
     if [ -f .env.example ]; then
         cp .env.example .env
@@ -171,6 +171,78 @@ echo '{
 echo -e "${GREEN}✓ Created Claude Desktop config with LegalContext server${NC}"
 echo -e "${YELLOW}Note: You may need to restart Claude Desktop for changes to take effect${NC}"
 
+# Step 4: OAuth Authorization
+echo -e "\n${BOLD}Setting up OAuth with Clio...${NC}"
+
+# Show Clio configuration information
+echo -e "\n${CYAN}Clio API Configuration:${NC}"
+echo -e "• Client ID: ${CLIO_CLIENT_ID:-(not set)}"
+echo -e "• Redirect URI: ${CLIO_REDIRECT_URI:-(not set)}"
+echo -e "• API Region: ${CLIO_API_REGION:-(not set)}"
+
+# Instructions for registering the app with Clio
+echo -e "\n${YELLOW}Make sure you have registered this application in the Clio Developer Portal:${NC}"
+echo -e "1. Go to: ${CYAN}https://app.clio.com/settings/developer_applications${NC} (or your region-specific Clio URL)"
+echo -e "2. Create a new application (if not done already)"
+echo -e "3. Set the redirect URI to exactly: ${CYAN}${CLIO_REDIRECT_URI:-http://127.0.0.1:3001/clio/auth/callback}${NC}"
+echo -e "4. Copy the Client ID and Client Secret to your .env file"
+
+# Ask if user wants to start OAuth flow now
+echo -e "\n${CYAN}Do you want to start the OAuth authorization flow now? (y/n):${NC}"
+read -p "" auth_now </dev/tty
+
+if [[ "$auth_now" =~ ^[Yy] ]]; then
+    # Start the server and open browser for auth
+    echo -e "\n${YELLOW}Starting OAuth server...${NC}"
+
+    # Execute using Bun in the background
+    echo -e "Starting LegalContext server in the background..."
+    bun run src/server.ts &
+    SERVER_PID=$!
+
+    # Wait a moment for the server to start
+    sleep 3
+
+    # Open the browser to the auth URL
+    AUTH_URL="http://localhost:${PORT:-3001}/clio/auth"
+    echo -e "\n${BOLD}Opening browser to authorize with Clio: ${CYAN}${AUTH_URL}${NC}"
+
+    # Open browser based on platform
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        open "$AUTH_URL"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        xdg-open "$AUTH_URL" || sensible-browser "$AUTH_URL" || x-www-browser "$AUTH_URL" || gnome-open "$AUTH_URL"
+    else
+        # Windows
+        start "$AUTH_URL" 2>/dev/null || cygstart "$AUTH_URL" 2>/dev/null || echo "Please open $AUTH_URL in your browser manually"
+    fi
+
+    # Wait for user to complete authorization
+    echo -e "\n${YELLOW}Complete the authorization in your browser.${NC}"
+    read -p "Press Enter after completing the authorization process... " </dev/tty
+
+    # Step 5: Run initial batch indexing
+    echo -e "\n${BOLD}Running initial batch document indexing...${NC}"
+    echo -e "This will index up to 100 documents from your Clio account (free tier limit)."
+    echo -e "${YELLOW}Note: This may take a few minutes depending on the number and size of your documents.${NC}"
+
+    # Run the batch indexing
+    bun run index:batch
+
+    # Stop the background server process
+    if [[ -n "$SERVER_PID" ]]; then
+        echo -e "Stopping background server process..."
+        kill $SERVER_PID 2>/dev/null || true
+    fi
+
+    echo -e "${GREEN}✓ OAuth setup and initial indexing completed${NC}"
+else
+    echo -e "${YELLOW}Skipped OAuth authorization flow and initial indexing${NC}"
+    echo -e "You can run the authorization flow later by starting the server with ${CYAN}bun start${NC}"
+    echo -e "Then visit ${CYAN}http://localhost:${PORT:-3001}/clio/auth${NC}"
+    echo -e "To run the initial document indexing, use ${CYAN}bun run index:batch${NC}"
+fi
+
 # Final instructions
 echo -e "\n${BOLD}${CYAN}====== Setup Complete ======${NC}\n"
 echo -e "You can now start LegalContext with: ${CYAN}bun start${NC}"
@@ -182,5 +254,6 @@ echo -e "• The .env file is correctly configured"
 echo -e "• Claude Desktop configuration is correctly updated"
 echo -e "• Clio API credentials are valid and registered with the correct redirect URI"
 echo -e "• The OAuth flow is completed successfully"
+echo -e "• Documents are properly indexed (check indexed_documents.json)"
 
 echo -e "\n${GREEN}${BOLD}Happy legal researching with Claude! 📚⚖️${NC}\n"
