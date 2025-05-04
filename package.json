@@ -1,6 +1,6 @@
 {
   "name": "@protomated/legal-context",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An open-source MCP server that connects Clio document management with Claude Desktop",
   "main": "dist/server.js",
   "type": "module",
