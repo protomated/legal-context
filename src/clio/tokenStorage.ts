@@ -9,15 +9,15 @@
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
 import { config } from '../config';
 import { logger } from '../logger';
 import { ClioTokens } from './oauthClient';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
+import { getLegalContextFilePath } from '../utils/paths';
 import * as crypto from 'crypto';
 
-// Path to the token storage file in user's home directory
-const TOKEN_FILE_PATH = join(homedir(), '.clio_tokens');
+// Path to the token storage file in the .legalcontext directory
+const TOKEN_FILE_PATH = getLegalContextFilePath('clio_tokens');
 logger.info(`Using token storage file: ${TOKEN_FILE_PATH}`);
 
 /**

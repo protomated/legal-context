@@ -37,9 +37,10 @@ import {
   CitationFormat,
 } from '../documents/citationTracker';
 import { existsSync } from 'fs';
+import { getLegalContextFilePath } from '../utils/paths';
 
-// File path for storing query counter data
-const QUERY_COUNTER_FILE = './query_counter.json';
+// File path for storing query counter data in the .legalcontext directory
+const QUERY_COUNTER_FILE = getLegalContextFilePath('query_counter.json');
 
 // Daily query counter for free tier limitation
 let queryCount = 0;

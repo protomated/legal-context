@@ -18,6 +18,7 @@
 import * as dotenv from 'dotenv';
 import * as os from 'os';
 import * as path from 'path';
+import { getLegalContextFilePath } from './utils/paths';
 
 // Load .env file first
 dotenv.config();
@@ -82,8 +83,8 @@ function loadConfig(): Config {
     clioRedirectUri: process.env.CLIO_REDIRECT_URI || 'http://127.0.0.1:3001/clio/auth/callback',
     clioApiRegion: (process.env.CLIO_API_REGION as 'us' | 'eu' | 'ca' | 'au') || 'us',
 
-    // Default LanceDB path is now in user's home directory
-    lanceDbPath: process.env.LANCEDB_DB_PATH || path.join(os.homedir(), '/lancedb'),
+    // Default LanceDB path is now in the .legalcontext directory in user's home directory
+    lanceDbPath: process.env.LANCEDB_DB_PATH || getLegalContextFilePath('lancedb'),
 
     secretKey: process.env.SECRET_KEY,
 
