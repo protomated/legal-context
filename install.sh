@@ -73,7 +73,7 @@ declare -a required_vars=(
     "CLIO_CLIENT_SECRET::Clio API Client Secret from developer portal"
     "CLIO_REDIRECT_URI:http://127.0.0.1:3001/clio/auth/callback:OAuth callback URL (must match Clio settings)"
     "CLIO_API_REGION:us:Clio API region (us, ca, eu, au)"
-    "LANCEDB_DB_PATH:./lancedb:Path to store LanceDB database files"
+    "LANCEDB_DB_PATH:$HOME/.legalcontext/lancedb:Path to store LanceDB database files"
     "SECRET_KEY::Secret key for encrypting stored tokens"
     "MAX_DOCUMENTS:100:Maximum number of documents for free tier"
     "MAX_QUERIES_PER_DAY:50:Maximum queries per day for free tier"

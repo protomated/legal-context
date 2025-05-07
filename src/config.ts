@@ -91,8 +91,10 @@ function loadConfig(): Config {
     maxDocuments: process.env.MAX_DOCUMENTS ? parseInt(process.env.MAX_DOCUMENTS, 10) : 100,
     maxQueriesPerDay: process.env.MAX_QUERIES_PER_DAY ? parseInt(process.env.MAX_QUERIES_PER_DAY, 10) : 50,
 
-    chunkSize: process.env.CHUNK_SIZE ? parseInt(process.env.CHUNK_SIZE, 10) : 1000,
-    chunkOverlap: process.env.CHUNK_OVERLAP ? parseInt(process.env.CHUNK_OVERLAP, 10) : 200,
+    // Increased chunk size for legal documents to better maintain context
+    chunkSize: process.env.CHUNK_SIZE ? parseInt(process.env.CHUNK_SIZE, 10) : 1500,
+    // Increased overlap for better semantic continuity between chunks
+    chunkOverlap: process.env.CHUNK_OVERLAP ? parseInt(process.env.CHUNK_OVERLAP, 10) : 300,
     maxDocumentSize: process.env.MAX_DOCUMENT_SIZE ? parseInt(process.env.MAX_DOCUMENT_SIZE, 10) : 5242880, // 5MB
   };
 
