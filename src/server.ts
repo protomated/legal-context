@@ -1,3 +1,5 @@
+// Path: src/server.ts
+
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -82,6 +84,15 @@ async function startServer() {
     name: 'LegalContext', // Identifies the server to clients
     version: '0.1.0',     // MVP version
     description: 'Secure semantic search for legal document management that bridges Clio and Claude Desktop',
+    // Add citation configuration to properly handle automated reminders
+    citationConfig: {
+      // Enable citations for all tools that return document content
+      enableCitations: true,
+      // Specify citation format to be used by Claude
+      citationFormat: 'antml:cite',
+      // Ensure proper handling of automated reminders
+      handleAutomatedReminders: true,
+    },
   });
 
   logger.info('LegalContext MCP server initialized successfully.');

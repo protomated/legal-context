@@ -1,5 +1,3 @@
-// src/tools/ragQueryTool.ts
-
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -272,11 +270,31 @@ export function registerRagQueryTool(server: McpServer): void {
           };
         }
 
+        // Create enhanced citations with proper source URLs
+        const citations = createCitations(searchResults).map(citation => {
+          // Add proper Clio URL format to each citation
+          return {
+            ...citation,
+            uri: `https://app.clio.com/nc/#/documents/${citation.documentId}/details`,
+            sourceUrl: `https://app.clio.com/nc/#/documents/${citation.documentId}/details`
+          };
+        });
+
+        // Generate citation metadata with the proper format for Claude
+        const citationMetadata = {
+          query,
+          citations,
+          format: "antml:cite", // Specify the correct citation format
+          totalDocuments: citations.length,
+          totalResults: searchResults.length,
+          timestamp: new Date().toISOString()
+        };
+
         // Create context with enhanced citation markers
         const citedContext = createCitedContext(searchResults);
 
         // Detect document type and prepare prompt options
-        const documentType = detectDocumentType(searchResults);
+        const documentTypeCategory = detectDocumentType(searchResults);
         const promptOptions: PromptTemplateOptions = {
           includeBlueBookCitations: citationFormat === 'bluebook',
           includeAnalysisGuidance: true,
@@ -286,18 +304,22 @@ export function registerRagQueryTool(server: McpServer): void {
         };
 
         // Get specialized legal prompt template
-        const template = getLegalPromptTemplate(documentType, promptOptions);
+        const template = getLegalPromptTemplate(documentTypeCategory, promptOptions);
 
         // Create augmented prompt with context and query
         const augmentedPrompt = template
           .replace('{{context}}', citedContext)
           .replace('{{query}}', query);
 
-        // Create enhanced citations for metadata
-        const citations = createCitations(searchResults);
-
-        // Generate citation metadata for Claude
-        const citationMetadata = generateCitationMetadata(query, citations, searchResults);
+        // Add instructions for Claude about citations
+        const citationInstructions = `
+CITATION INSTRUCTIONS:
+- When referencing any content from the documents, please use  tags to properly cite the source
+- Citations should follow this format: cited content
+- Each document is assigned a DOC_INDEX (starting from 0)
+- Make sure to cite all facts and information that come from the provided documents
+- Always include the source URL (https://app.clio.com/nc/#/documents/[document id]/details) when mentioning a document
+`;
 
         // Return the augmented prompt and citation metadata as a CallToolResult
         return {
@@ -305,12 +327,16 @@ export function registerRagQueryTool(server: McpServer): void {
             // Include the augmented prompt as TextContent
             {
               type: 'text',
-              text: augmentedPrompt,
+              text: augmentedPrompt + citationInstructions,
             },
             // Include enhanced citation metadata as structured data
             {
               type: 'text',
               text: JSON.stringify(citationMetadata, null, 2),
+              metadata: {
+                type: "citation_metadata",
+                format: "antml:cite"
+              }
             },
           ],
         };
