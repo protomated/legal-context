@@ -22,6 +22,7 @@ import { generateEmbedding } from '../documents/embeddings';
 import { logger } from '../logger';
 import * as lancedb from '@lancedb/lancedb';
 import { config } from '../config';
+import { getLegalContextFilePath } from '../utils/paths';
 
 async function testVectorSearch() {
   try {
@@ -30,7 +31,7 @@ async function testVectorSearch() {
     logger.info('=======================================');
 
     // Try to connect directly to LanceDB
-    const dbPath = config.lanceDbPath || './lancedb';
+    const dbPath = config.lanceDbPath || getLegalContextFilePath('lancedb');
     logger.info(`Connecting directly to LanceDB at ${dbPath}`);
     const db = await lancedb.connect(dbPath);
 

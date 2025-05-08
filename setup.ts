@@ -188,7 +188,7 @@ async function validateEnvironment() {
     { key: 'CLIO_CLIENT_SECRET', description: 'Clio API Client Secret from developer portal' },
     { key: 'CLIO_REDIRECT_URI', default: 'http://localhost:3001/clio/auth/callback', description: 'OAuth callback URL (must match Clio settings)' },
     { key: 'CLIO_API_REGION', default: 'us', description: 'Clio API region (us, ca, eu, au)' },
-    { key: 'LANCEDB_DB_PATH', default: './lancedb', description: 'Path to store LanceDB database files' },
+    { key: 'LANCEDB_DB_PATH', default: path.join(os.homedir(), '.legalcontext', 'lancedb'), description: 'Path to store LanceDB database files' },
     { key: 'SECRET_KEY', description: 'Secret key for encrypting stored tokens' },
     { key: 'MAX_DOCUMENTS', default: '100', description: 'Maximum number of documents for free tier' },
     { key: 'MAX_QUERIES_PER_DAY', default: '50', description: 'Maximum queries per day for free tier' }

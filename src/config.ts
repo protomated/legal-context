@@ -18,6 +18,7 @@
 import * as dotenv from 'dotenv';
 import * as os from 'os';
 import * as path from 'path';
+import { getLegalContextFilePath } from './utils/paths';
 
 // Load .env file first
 dotenv.config();
@@ -82,16 +83,18 @@ function loadConfig(): Config {
     clioRedirectUri: process.env.CLIO_REDIRECT_URI || 'http://127.0.0.1:3001/clio/auth/callback',
     clioApiRegion: (process.env.CLIO_API_REGION as 'us' | 'eu' | 'ca' | 'au') || 'us',
 
-    // Default LanceDB path is now in user's home directory
-    lanceDbPath: process.env.LANCEDB_DB_PATH || path.join(os.homedir(), '/lancedb'),
+    // Default LanceDB path is now in the .legalcontext directory in user's home directory
+    lanceDbPath: process.env.LANCEDB_DB_PATH || getLegalContextFilePath('lancedb'),
 
     secretKey: process.env.SECRET_KEY,
 
     maxDocuments: process.env.MAX_DOCUMENTS ? parseInt(process.env.MAX_DOCUMENTS, 10) : 100,
     maxQueriesPerDay: process.env.MAX_QUERIES_PER_DAY ? parseInt(process.env.MAX_QUERIES_PER_DAY, 10) : 50,
 
-    chunkSize: process.env.CHUNK_SIZE ? parseInt(process.env.CHUNK_SIZE, 10) : 1000,
-    chunkOverlap: process.env.CHUNK_OVERLAP ? parseInt(process.env.CHUNK_OVERLAP, 10) : 200,
+    // Increased chunk size for legal documents to better maintain context
+    chunkSize: process.env.CHUNK_SIZE ? parseInt(process.env.CHUNK_SIZE, 10) : 1500,
+    // Increased overlap for better semantic continuity between chunks
+    chunkOverlap: process.env.CHUNK_OVERLAP ? parseInt(process.env.CHUNK_OVERLAP, 10) : 300,
     maxDocumentSize: process.env.MAX_DOCUMENT_SIZE ? parseInt(process.env.MAX_DOCUMENT_SIZE, 10) : 5242880, // 5MB
   };
 

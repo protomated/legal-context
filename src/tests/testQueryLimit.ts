@@ -18,9 +18,10 @@
 import { existsSync } from "fs";
 import { config } from "../config";
 import { logger } from "../logger";
+import { getLegalContextFilePath } from "../utils/paths";
 
-// File path for query counter data
-const QUERY_COUNTER_FILE = "./query_counter.json";
+// File path for query counter data in the .legalcontext directory
+const QUERY_COUNTER_FILE = getLegalContextFilePath("query_counter.json");
 
 // Function to read the current counter value from file
 async function readCounterFile() {

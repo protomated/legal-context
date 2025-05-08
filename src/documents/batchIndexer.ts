@@ -23,12 +23,13 @@ import { ClioDocument, isProcessableDocument } from '../clio';
 import { config } from '../config';
 import * as path from 'path';
 import * as fs from 'fs';
+import { getLegalContextFilePath } from '../utils/paths';
 
 // Maximum number of documents to process in a batch
 export const MAX_DOCUMENTS = 100;
 
-// Path to store the list of indexed documents
-const INDEXED_DOCS_PATH = path.join(process.cwd(), 'indexed_documents.json');
+// Path to store the list of indexed documents in the .legalcontext directory
+const INDEXED_DOCS_PATH = getLegalContextFilePath('indexed_documents.json');
 
 /**
  * Interface for batch indexing results

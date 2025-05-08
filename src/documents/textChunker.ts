@@ -53,7 +53,13 @@ const LEGAL_SECTION_PATTERNS = [
   // Lettered paragraph patterns (e.g., "A. Definitions")
   /([A-Z])\.\s+([A-Z][^\n.]+\.)/g,
   // Common legal document section headers
-  /^(WITNESSETH|RECITALS|DEFINITIONS|REPRESENTATIONS AND WARRANTIES|COVENANTS|CONDITIONS PRECEDENT|INDEMNIFICATION|TERMINATION|MISCELLANEOUS|EXHIBITS|APPENDIX|SCHEDULE|ANNEX):?$/gmi
+  /^(WITNESSETH|RECITALS|DEFINITIONS|REPRESENTATIONS AND WARRANTIES|COVENANTS|CONDITIONS PRECEDENT|INDEMNIFICATION|TERMINATION|MISCELLANEOUS|EXHIBITS|APPENDIX|SCHEDULE|ANNEX):?$/gmi,
+  // Additional legal document section headers
+  /^(AGREEMENT|PARTIES|BACKGROUND|PURPOSE|SCOPE|TERM|PAYMENT|CONFIDENTIALITY|INTELLECTUAL PROPERTY|LIMITATION OF LIABILITY|FORCE MAJEURE|GOVERNING LAW|DISPUTE RESOLUTION|NOTICES|ASSIGNMENT|SEVERABILITY|ENTIRE AGREEMENT|AMENDMENT|WAIVER|COUNTERPARTS|EXECUTION):?$/gmi,
+  // Contract clause headers
+  /^([0-9]+(?:\.[0-9]+)*)\s+(.*?):$/gm,
+  // Legal document subsections with parenthetical numbering
+  /\(([a-z]|[ivx]+|[0-9]+)\)\s+([A-Z].*?[.;])/g
 ];
 
 /**
@@ -236,7 +242,7 @@ export async function chunkText(
 
 /**
  * Recursively split text using a list of separators
- * With optimization for legal document structure
+ * With enhanced optimization for legal document structure
  */
 function recursiveTextSplit(
   text: string,
@@ -264,43 +270,107 @@ function recursiveTextSplit(
   let chunks: string[] = [];
   let currentChunk = "";
 
-  for (const split of splits) {
+  // First pass: identify sections and clauses
+  const splitMetadata = splits.map(split => {
     // Skip empty splits
-    if (split.trim().length === 0) continue;
+    if (split.trim().length === 0) return { split, isSection: false, isClause: false, priority: 0 };
 
-    // Special handling for legal document structures
-    // If this split contains a section header or important clause, try to keep it intact
+    // Check if this split contains a section header
     const containsSection = LEGAL_SECTION_PATTERNS.some(pattern => {
       pattern.lastIndex = 0;
       return pattern.test(split);
     });
 
+    // Check if this split contains an important clause
     const containsImportantClause = LEGAL_CLAUSE_TYPES.some(clause =>
       clause.pattern.test(split)
     );
 
-    // If this is an important legal section and isn't too big on its own, keep it together
-    if ((containsSection || containsImportantClause) && split.length <= maxChunkSize * 1.2) {
-      // If we have existing content in the current chunk, finalize it first
+    // Check for citations which should be kept with surrounding context
+    const containsCitations = LEGAL_CITATION_PATTERNS.some(pattern => {
+      pattern.lastIndex = 0;
+      return pattern.test(split);
+    });
+
+    // Assign a priority score to help with chunking decisions
+    let priority = 0;
+    if (containsSection) priority += 3;
+    if (containsImportantClause) priority += 2;
+    if (containsCitations) priority += 1;
+
+    return {
+      split,
+      isSection: containsSection,
+      isClause: containsImportantClause,
+      hasCitations: containsCitations,
+      priority
+    };
+  });
+
+  // Second pass: create chunks with awareness of legal structure
+  for (let i = 0; i < splitMetadata.length; i++) {
+    const { split, isSection, isClause, hasCitations, priority } = splitMetadata[i];
+
+    // Skip empty splits
+    if (split.trim().length === 0) continue;
+
+    // Special handling for high-priority legal content
+    if (priority > 0 && split.length <= maxChunkSize * 1.5) {
+      // If we have existing content in the current chunk, check if we should finalize it
       if (currentChunk.length > 0) {
-        chunks.push(currentChunk);
-        currentChunk = "";
+        // If this is a section header, always start a new chunk
+        if (isSection) {
+          chunks.push(currentChunk);
+          currentChunk = "";
+        }
+        // If this is an important clause and adding it would exceed the chunk size,
+        // finalize the current chunk and start a new one with the clause
+        else if (isClause && currentChunk.length + split.length + separator.length > maxChunkSize) {
+          chunks.push(currentChunk);
+          currentChunk = "";
+        }
+        // Otherwise, try to keep related content together if possible
       }
 
-      // If the section itself is too large, split it further
+      // If the high-priority content itself is too large, split it further
+      // but try to keep it more intact by using a larger max size
       if (split.length > maxChunkSize) {
-        const sectionChunks = recursiveTextSplit(split, nextSeparators, maxChunkSize, chunkOverlap);
+        // If current chunk is not empty, finalize it first
+        if (currentChunk.length > 0) {
+          chunks.push(currentChunk);
+          currentChunk = "";
+        }
+
+        // Use a larger max size for important legal sections to keep them more intact
+        const adjustedMaxSize = isSection ? Math.min(maxChunkSize * 1.5, 2000) : maxChunkSize;
+        const sectionChunks = recursiveTextSplit(split, nextSeparators, adjustedMaxSize, chunkOverlap);
         chunks = chunks.concat(sectionChunks);
       } else {
-        // Otherwise keep the section as a single chunk
-        chunks.push(split);
+        // Add the high-priority content to the current chunk if it fits
+        if (currentChunk.length + split.length + (currentChunk.length > 0 ? separator.length : 0) <= maxChunkSize * 1.2) {
+          if (currentChunk.length > 0) {
+            currentChunk += separator;
+          }
+          currentChunk += split;
+        } else {
+          // If it doesn't fit, finalize current chunk and start a new one
+          if (currentChunk.length > 0) {
+            chunks.push(currentChunk);
+          }
+          currentChunk = split;
+        }
       }
       continue;
     }
 
+    // Look ahead to see if the next split is a high-priority item that should be kept with this one
+    const lookAhead = i < splitMetadata.length - 1 ? splitMetadata[i + 1] : null;
+    const shouldKeepWithNext = lookAhead && lookAhead.priority > 1 &&
+      (split.length + lookAhead.split.length + separator.length <= maxChunkSize);
+
     // Normal handling for regular content
     // If adding this split would exceed the chunk size, process the current chunk
-    if (currentChunk.length + split.length + separator.length > maxChunkSize && currentChunk.length > 0) {
+    if (!shouldKeepWithNext && currentChunk.length + split.length + (currentChunk.length > 0 ? separator.length : 0) > maxChunkSize && currentChunk.length > 0) {
       // If the current chunk is still too large, recursively split it
       if (currentChunk.length > maxChunkSize) {
         chunks = chunks.concat(
@@ -315,11 +385,25 @@ function recursiveTextSplit(
         // For legal documents, try to maintain semantic boundaries in the overlap
         // Find a clean boundary (period, semi-colon, colon, etc) for the overlap if possible
         let overlapText = currentChunk.slice(-chunkOverlap);
-        const boundaryMatch = overlapText.match(/[.;:]\s+[A-Z]/);
 
-        if (boundaryMatch && boundaryMatch.index && boundaryMatch.index > chunkOverlap / 2) {
-          // If we found a good boundary point, use that
-          overlapText = currentChunk.slice(-(boundaryMatch.index + 2));
+        // Look for sentence or clause boundaries in the overlap
+        const boundaryMatches = [...overlapText.matchAll(/[.;:]\s+[A-Z]/g)];
+
+        if (boundaryMatches.length > 0 && boundaryMatches[0].index !== undefined) {
+          // Find the best boundary point that's not too close to the start
+          const bestBoundary = boundaryMatches.reduce((best, match) => {
+            if (match.index === undefined) return best;
+            // Prefer boundaries that are at least 1/3 into the overlap but not at the very end
+            if (match.index > chunkOverlap / 3 && (!best || match.index < best)) {
+              return match.index;
+            }
+            return best;
+          }, 0);
+
+          if (bestBoundary > 0) {
+            // If we found a good boundary point, use that
+            overlapText = currentChunk.slice(-(bestBoundary + 2));
+          }
         }
 
         currentChunk = overlapText + separator + split;

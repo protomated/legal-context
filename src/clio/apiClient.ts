@@ -16,6 +16,8 @@ import { forceReauthentication } from './authStatus';
 // API rate limit constants
 const MAX_RATE_LIMIT_RETRIES = 3;
 const RATE_LIMIT_RETRY_DELAY = 2000; // 2 seconds
+const MAX_REQUESTS_PER_MINUTE = 48; // Clio's limit is 50, we use 48 to be safe
+const MINUTE_IN_MS = 60 * 1000;
 
 // Clio API response interfaces
 export interface ClioDocument {
@@ -97,6 +99,7 @@ export function isProcessableDocument(doc: ClioDocument): boolean {
 export class ClioApiClient {
   private tokens: ClioTokens | null = null;
   private baseUrl: string;
+  private requestTimestamps: number[] = [];
 
   constructor() {
     try {
@@ -200,6 +203,49 @@ export class ClioApiClient {
   }
 
   /**
+   * Check if we can make a new request based on rate limits
+   * @returns boolean indicating if we can make a new request
+   */
+  private canMakeRequest(): boolean {
+    const now = Date.now();
+    // Remove timestamps older than 1 minute
+    this.requestTimestamps = this.requestTimestamps.filter(
+      timestamp => now - timestamp < MINUTE_IN_MS
+    );
+    // Check if we're under the limit
+    return this.requestTimestamps.length < MAX_REQUESTS_PER_MINUTE;
+  }
+
+  /**
+   * Wait until we can make a new request if needed
+   */
+  private async waitForRateLimit(): Promise<void> {
+    if (this.canMakeRequest()) {
+      return; // We can make a request now
+    }
+
+    const now = Date.now();
+    // Get the oldest timestamp
+    const oldestTimestamp = this.requestTimestamps[0];
+    // Calculate how long to wait until we can make a new request
+    const waitTime = MINUTE_IN_MS - (now - oldestTimestamp);
+
+    if (waitTime > 0) {
+      logger.info(`Rate limit reached. Waiting ${waitTime}ms before making next request...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      // Recursive call to check again after waiting
+      await this.waitForRateLimit();
+    }
+  }
+
+  /**
+   * Record a new request timestamp
+   */
+  private recordRequest(): void {
+    this.requestTimestamps.push(Date.now());
+  }
+
+  /**
    * Make an authenticated request to the Clio API
    */
   private async makeRequest<T>(
@@ -269,6 +315,9 @@ export class ClioApiClient {
 
     while (true) {
       try {
+        // Wait for rate limit before making request
+        await this.waitForRateLimit();
+
         const url = new URL(`/api/v4/${endpoint}`, this.baseUrl);
 
         // For GET requests, add query parameters
@@ -279,6 +328,9 @@ export class ClioApiClient {
             }
           });
         }
+
+        // Record this request
+        this.recordRequest();
 
         const response = await fetch(url.toString(), options);
 
@@ -415,7 +467,13 @@ export class ClioApiClient {
         throw new Error('Not authenticated. Initialize the client first.');
       }
 
+      // Wait for rate limit before making request
+      await this.waitForRateLimit();
+
       const url = new URL(`/api/v4/documents/${documentId}/download`, this.baseUrl);
+
+      // Record this request
+      this.recordRequest();
 
       const response = await fetch(url.toString(), {
         method: 'GET',

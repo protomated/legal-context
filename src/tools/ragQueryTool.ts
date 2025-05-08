@@ -1,5 +1,3 @@
-// src/tools/ragQueryTool.ts
-
 /**
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -37,9 +35,10 @@ import {
   CitationFormat,
 } from '../documents/citationTracker';
 import { existsSync } from 'fs';
+import { getLegalContextFilePath } from '../utils/paths';
 
-// File path for storing query counter data
-const QUERY_COUNTER_FILE = './query_counter.json';
+// File path for storing query counter data in the .legalcontext directory
+const QUERY_COUNTER_FILE = getLegalContextFilePath('query_counter.json');
 
 // Daily query counter for free tier limitation
 let queryCount = 0;
@@ -48,11 +47,11 @@ let queryDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 /**
  * Load query counter data from file
  */
-function loadQueryCounter() {
+async function loadQueryCounter() {
   try {
     if (existsSync(QUERY_COUNTER_FILE)) {
-      const data = Bun.file(QUERY_COUNTER_FILE);
-      const counterData = JSON.parse(data.toString());
+      const data = await Bun.file(QUERY_COUNTER_FILE).text();
+      const counterData = JSON.parse(data);
       queryCount = counterData.count || 0;
       queryDate = counterData.date || new Date().toISOString().split('T')[0];
       logger.debug(`Loaded query counter from file: ${queryCount} queries on ${queryDate}`);
@@ -82,13 +81,17 @@ async function saveQueryCounter() {
 }
 
 // Initialize counter from file on module load
-loadQueryCounter();
+(async () => {
+  await loadQueryCounter();
+})().catch(error => {
+  logger.error("Failed to load query counter:", error);
+});
 
 /**
  * Specialized legal query preprocessing
  * Identifies and expands legal terminology to improve search results
  */
-function preprocessLegalQuery(query: string): string {
+export function preprocessLegalQuery(query: string): string {
   // Convert to lowercase for processing
   const lowerQuery = query.toLowerCase();
 
@@ -149,8 +152,27 @@ function preprocessLegalQuery(query: string): string {
 
   if (lowerQuery.includes('case') ||
     lowerQuery.includes('lawsuit') ||
-    lowerQuery.includes('litigation')) {
-    expandedQuery += ' legal-case lawsuit litigation legal-proceeding';
+    lowerQuery.includes('litigation') ||
+    lowerQuery.includes('precedent') ||
+    lowerQuery.includes('precedents')) {
+    expandedQuery += ' legal-case lawsuit litigation legal-proceeding precedent legal-precedent case-law';
+  }
+
+  // Check for healthcare related terms
+  if (lowerQuery.includes('healthcare') ||
+    lowerQuery.includes('health care') ||
+    lowerQuery.includes('medical') ||
+    lowerQuery.includes('hospital') ||
+    lowerQuery.includes('patient')) {
+    expandedQuery += ' healthcare health-care medical-records patient-data hospital medical-privacy';
+  }
+
+  // Check for privacy related terms
+  if (lowerQuery.includes('privacy') ||
+    lowerQuery.includes('confidential') ||
+    lowerQuery.includes('hipaa') ||
+    lowerQuery.includes('data protection')) {
+    expandedQuery += ' privacy data-privacy confidentiality hipaa data-protection personal-information phi';
   }
 
   // Return original query if no expansions were made
@@ -271,11 +293,31 @@ export function registerRagQueryTool(server: McpServer): void {
           };
         }
 
+        // Create enhanced citations with proper source URLs
+        const citations = createCitations(searchResults).map(citation => {
+          // Add proper Clio URL format to each citation
+          return {
+            ...citation,
+            uri: `https://app.clio.com/nc/#/documents/${citation.documentId}/details`,
+            sourceUrl: `https://app.clio.com/nc/#/documents/${citation.documentId}/details`
+          };
+        });
+
+        // Generate citation metadata with the proper format for Claude
+        const citationMetadata = {
+          query,
+          citations,
+          format: "antml:cite", // Specify the correct citation format
+          totalDocuments: citations.length,
+          totalResults: searchResults.length,
+          timestamp: new Date().toISOString()
+        };
+
         // Create context with enhanced citation markers
         const citedContext = createCitedContext(searchResults);
 
         // Detect document type and prepare prompt options
-        const documentType = detectDocumentType(searchResults);
+        const documentTypeCategory = detectDocumentType(searchResults);
         const promptOptions: PromptTemplateOptions = {
           includeBlueBookCitations: citationFormat === 'bluebook',
           includeAnalysisGuidance: true,
@@ -285,18 +327,22 @@ export function registerRagQueryTool(server: McpServer): void {
         };
 
         // Get specialized legal prompt template
-        const template = getLegalPromptTemplate(documentType, promptOptions);
+        const template = getLegalPromptTemplate(documentTypeCategory, promptOptions);
 
         // Create augmented prompt with context and query
         const augmentedPrompt = template
           .replace('{{context}}', citedContext)
           .replace('{{query}}', query);
 
-        // Create enhanced citations for metadata
-        const citations = createCitations(searchResults);
-
-        // Generate citation metadata for Claude
-        const citationMetadata = generateCitationMetadata(query, citations, searchResults);
+        // Add instructions for Claude about citations
+        const citationInstructions = `
+CITATION INSTRUCTIONS:
+- When referencing any content from the documents, please use  tags to properly cite the source
+- Citations should follow this format: cited content
+- Each document is assigned a DOC_INDEX (starting from 0)
+- Make sure to cite all facts and information that come from the provided documents
+- Always include the source URL (https://app.clio.com/nc/#/documents/[document id]/details) when mentioning a document
+`;
 
         // Return the augmented prompt and citation metadata as a CallToolResult
         return {
@@ -304,12 +350,16 @@ export function registerRagQueryTool(server: McpServer): void {
             // Include the augmented prompt as TextContent
             {
               type: 'text',
-              text: augmentedPrompt,
+              text: augmentedPrompt + citationInstructions,
             },
             // Include enhanced citation metadata as structured data
             {
               type: 'text',
               text: JSON.stringify(citationMetadata, null, 2),
+              metadata: {
+                type: "citation_metadata",
+                format: "antml:cite"
+              }
             },
           ],
         };

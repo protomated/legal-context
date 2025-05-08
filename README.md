@@ -272,6 +272,7 @@ LegalContext prioritizes security and confidentiality:
 - **Encrypted Token Storage**: Access tokens are securely stored with encryption
 - **No Cloud Dependencies**: Documents are never sent to external AI services
 - **Full Transparency**: Open-source codebase allows complete security audit
+- **Centralized Data Storage**: All data is stored in the `~/.legalcontext` directory in your home folder
 
 ## Free Tier Limitations
 
@@ -297,7 +298,7 @@ These limitations ensure the project remains sustainable while providing value t
    - Make sure you've indexed documents with `bun run index:batch`
    - Check that your documents are in a compatible format (PDF, DOCX)
    - Verify that the documents exist in your Clio account
-   - Look at the `indexed_documents.json` file to see which documents are indexed
+   - Look at the `~/.legalcontext/indexed_documents.json` file to see which documents are indexed
 
 3. **LegalContext not appearing in Claude Desktop**
    - Ensure the Claude Desktop configuration file has the correct format and location
@@ -306,6 +307,17 @@ These limitations ensure the project remains sustainable while providing value t
    - Check that LegalContext server is running (`bun start` in a terminal)
    - Restart Claude Desktop after configuration changes
    - Look at the logs in `~/Library/Logs/Claude/legalcontext.log` (macOS)
+
+### Data Storage
+
+LegalContext stores all its data in the `~/.legalcontext` directory in your home folder. This includes:
+
+- **LanceDB database**: `~/.legalcontext/lancedb` - Contains the vector embeddings for document search
+- **Clio tokens**: `~/.legalcontext/clio_tokens` - Stores your Clio API authentication tokens
+- **Indexed documents**: `~/.legalcontext/indexed_documents.json` - Tracks which documents have been indexed
+- **Query counter**: `~/.legalcontext/query_counter.json` - Tracks daily query usage for free tier limitations
+
+If you need to reset the application, you can delete this directory, but you'll need to re-authenticate with Clio and re-index your documents.
 
 ### Diagnostic Tools
 

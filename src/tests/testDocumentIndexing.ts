@@ -22,6 +22,7 @@ import { generateEmbedding, clearEmbeddingCache } from '../documents/embeddings'
 import { logger } from '../logger';
 import * as lancedb from '@lancedb/lancedb';
 import { config } from '../config';
+import { getLegalContextFilePath } from '../utils/paths';
 
 // Set to true to rebuild the vector table from scratch
 const REBUILD_VECTOR_TABLE = true;
@@ -455,7 +456,7 @@ if (!indexerInstance.hasOwnProperty('getDb')) {
   Object.defineProperty(indexerInstance, 'getDb', {
     value: async function() {
       try {
-        const dbPath = config.lanceDbPath || './lancedb';
+        const dbPath = config.lanceDbPath || getLegalContextFilePath('lancedb');
         return await lancedb.connect(dbPath);
       } catch (error) {
         logger.error('Error connecting to LanceDB:', error);
