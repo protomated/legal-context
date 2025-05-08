@@ -47,11 +47,11 @@ let queryDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 /**
  * Load query counter data from file
  */
-function loadQueryCounter() {
+async function loadQueryCounter() {
   try {
     if (existsSync(QUERY_COUNTER_FILE)) {
-      const data = Bun.file(QUERY_COUNTER_FILE);
-      const counterData = JSON.parse(data.toString());
+      const data = await Bun.file(QUERY_COUNTER_FILE).text();
+      const counterData = JSON.parse(data);
       queryCount = counterData.count || 0;
       queryDate = counterData.date || new Date().toISOString().split('T')[0];
       logger.debug(`Loaded query counter from file: ${queryCount} queries on ${queryDate}`);
@@ -81,13 +81,17 @@ async function saveQueryCounter() {
 }
 
 // Initialize counter from file on module load
-loadQueryCounter();
+(async () => {
+  await loadQueryCounter();
+})().catch(error => {
+  logger.error("Failed to load query counter:", error);
+});
 
 /**
  * Specialized legal query preprocessing
  * Identifies and expands legal terminology to improve search results
  */
-function preprocessLegalQuery(query: string): string {
+export function preprocessLegalQuery(query: string): string {
   // Convert to lowercase for processing
   const lowerQuery = query.toLowerCase();
 
@@ -148,8 +152,27 @@ function preprocessLegalQuery(query: string): string {
 
   if (lowerQuery.includes('case') ||
     lowerQuery.includes('lawsuit') ||
-    lowerQuery.includes('litigation')) {
-    expandedQuery += ' legal-case lawsuit litigation legal-proceeding';
+    lowerQuery.includes('litigation') ||
+    lowerQuery.includes('precedent') ||
+    lowerQuery.includes('precedents')) {
+    expandedQuery += ' legal-case lawsuit litigation legal-proceeding precedent legal-precedent case-law';
+  }
+
+  // Check for healthcare related terms
+  if (lowerQuery.includes('healthcare') ||
+    lowerQuery.includes('health care') ||
+    lowerQuery.includes('medical') ||
+    lowerQuery.includes('hospital') ||
+    lowerQuery.includes('patient')) {
+    expandedQuery += ' healthcare health-care medical-records patient-data hospital medical-privacy';
+  }
+
+  // Check for privacy related terms
+  if (lowerQuery.includes('privacy') ||
+    lowerQuery.includes('confidential') ||
+    lowerQuery.includes('hipaa') ||
+    lowerQuery.includes('data protection')) {
+    expandedQuery += ' privacy data-privacy confidentiality hipaa data-protection personal-information phi';
   }
 
   // Return original query if no expansions were made

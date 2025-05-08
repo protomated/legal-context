@@ -41,11 +41,11 @@ let queryDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 /**
  * Load query counter data from file
  */
-function loadQueryCounter() {
+async function loadQueryCounter() {
   try {
     if (existsSync(QUERY_COUNTER_FILE)) {
-      const data = Bun.file(QUERY_COUNTER_FILE);
-      const counterData = JSON.parse(data.toString());
+      const data = await Bun.file(QUERY_COUNTER_FILE).text();
+      const counterData = JSON.parse(data);
       queryCount = counterData.count || 0;
       queryDate = counterData.date || new Date().toISOString().split('T')[0];
       logger.debug(`Loaded query counter from file: ${queryCount} queries on ${queryDate}`);
@@ -75,7 +75,11 @@ async function saveQueryCounter() {
 }
 
 // Initialize counter from file on module load
-loadQueryCounter();
+(async () => {
+  await loadQueryCounter();
+})().catch(error => {
+  logger.error("Failed to load query counter:", error);
+});
 
 // Query type categories
 type QueryCategory =
