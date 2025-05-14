@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/protomated-legal-context-badge.png)](https://mseep.ai/app/protomated-legal-context)
+
 # LegalContext
 
 LegalContext is an open-source Model Context Protocol (MCP) server that creates a secure bridge between a law firm's Clio document management system and Claude Desktop AI assistant.
